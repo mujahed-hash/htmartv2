@@ -3,6 +3,7 @@ const User = require('../database/models/user');
 const ProductSubmission = require('../database/models/productsubmission');
 const Notification = require('../database/models/notification');
 const slugify = require('slugify');
+const { connectedUsers, getIo } = require('../socket'); // Import connectedUsers and getIo
 
 // Post a new requirement by the buyer
 const postRequirement = async (req, res) => {
@@ -32,12 +33,34 @@ const postRequirement = async (req, res) => {
         const savedRequirement = await newRequirement.save();
 
         // Notify the admin about the new requirement
-        await Notification.create({
+      const buyerNotification =  await Notification.create({
             userId: buyer._id,  // This can be an Admin's userId instead
             message: `A new requirement has been posted by buyer ${buyer.name}.`,
             requirementIdentifier:customIdentifier,
             referenceId: savedRequirement._id  // Reference to the requirement
         });
+        const [buyerUnreadCount] = await Promise.all([
+            Notification.countDocuments({ userId:buyer._id, isRead: false }),
+        ]);
+    
+        const buyerSocketId = connectedUsers.get(buyer._id.toString());
+        // const supplierSocketId = connectedUsers.get(supplier?._id.toString());
+    
+        const io = getIo(); // Get io instance from socket.js
+    
+        if (buyerSocketId) {
+            io.to(buyerSocketId).emit('notification', buyerNotification);
+            io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
+            console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
+    
+        }
+    
+        // if (supplierSocketId) {
+        //     io.to(supplierSocketId).emit('notification', supplierNotification);
+        //     io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
+        //     console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount)
+        // )
+        // }
 
         // Respond with a success message and the saved requirement
         res.status(201).json({ message: 'Requirement posted successfully.', requirement: savedRequirement });
@@ -48,44 +71,111 @@ const postRequirement = async (req, res) => {
 };
 
 
+// const forwardRequirementToSuppliers = async (req, res) => {
+//     try {
+//         const { requirementId } = req.body;
+
+//         const requirement = await Requirement.findById(requirementId);
+
+//         if (!requirement) {
+//             return res.status(404).json({ message: 'Requirement not found.' });
+//         }
+
+//         // Find all suppliers
+//         const suppliers = await User.find({ isSupplier: true });
+
+//         if (!suppliers.length) {
+//             return res.status(404).json({ message: 'No suppliers found.' });
+//         }
+
+//         // Update the requirement to include forwarded suppliers and mark as forwarded
+//         requirement.forwardedTo = suppliers.map(supplier => supplier._id);
+//         requirement.status = 'Forwarded';
+//         await requirement.save();
+//          var supp;
+//         // Notify each supplier
+//         const supplierNotification =   suppliers.forEach(async (supplier) => {
+//              supp = supplier;
+//             await Notification.create({
+//                 userId: supplier._id,
+//                 message: `A new requirement has been forwarded to you by admin for buyer.`,
+//                 referenceId: requirement._id,
+//                 requirementIdentifier:requirement.customIdentifier,
+
+//             });
+//         });
+//         const [supplierUnreadCount] = await Promise.all([
+//             Notification.countDocuments({ userId:buyer._id, isRead: false }),
+//         ]);
+//         const io = getIo(); // Get io instance from socket.js
+//         const supplierSocketId = connectedUsers.get(supp._id.toString());
+
+//         if (supplierSocketId) {
+//             io.to(supplierSocketId).emit('notification', supplierNotification);
+//             io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
+//             console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount))
+    
+//         }
+    
+//         res.status(200).json({ message: 'Requirement forwarded to suppliers successfully.' });
+//     } catch (error) {
+//         res.status(500).json({ message: 'Error forwarding requirement.', error });
+//     }
+// };
 const forwardRequirementToSuppliers = async (req, res) => {
     try {
         const { requirementId } = req.body;
 
+        // Find the requirement by ID
         const requirement = await Requirement.findById(requirementId);
-
         if (!requirement) {
             return res.status(404).json({ message: 'Requirement not found.' });
         }
 
         // Find all suppliers
         const suppliers = await User.find({ isSupplier: true });
-
         if (!suppliers.length) {
             return res.status(404).json({ message: 'No suppliers found.' });
         }
 
-        // Update the requirement to include forwarded suppliers and mark as forwarded
-        requirement.forwardedTo = suppliers.map(supplier => supplier._id);
+        // Update the requirement with forwarded suppliers and status
+        const supplierIds = suppliers.map(supplier => supplier._id);
+        requirement.forwardedTo = supplierIds;
         requirement.status = 'Forwarded';
         await requirement.save();
 
-        // Notify each supplier
-        suppliers.forEach(async (supplier) => {
-            await Notification.create({
-                userId: supplier._id,
-                message: `A new requirement has been forwarded to you by admin for buyer.`,
-                referenceId: requirement._id,
-                requirementIdentifier:customIdentifier,
+        // Notify suppliers
+        const notifications = suppliers.map(supplier => ({
+            userId: supplier._id,
+            message: 'A new requirement has been forwarded to you by admin for buyer.',
+            referenceId: requirement._id,
+            requirementIdentifier: requirement.customIdentifier,
+        }));
+        await Notification.insertMany(notifications);
 
-            });
-        });
+        // Broadcast notifications via sockets
+        const io = getIo(); // Get io instance from socket.js
+        for (const supplier of suppliers) {
+            const supplierSocketId = connectedUsers.get(supplier._id.toString());
+            if (supplierSocketId) {
+                const unreadCount = await Notification.countDocuments({
+                    userId: supplier._id,
+                    isRead: false,
+                });
+                io.to(supplierSocketId).emit('notification', {
+                    message: `A new requirement has been forwarded to you.`,
+                });
+                io.to(supplierSocketId).emit('unreadCountUpdate', unreadCount);
+            }
+        }
 
         res.status(200).json({ message: 'Requirement forwarded to suppliers successfully.' });
     } catch (error) {
+        console.error('Error forwarding requirement:', error);
         res.status(500).json({ message: 'Error forwarding requirement.', error });
     }
 };
+
 const getForwardedRequirementsForSupplier = async (req, res) => {
     try {
         const supplierId = req.userId;

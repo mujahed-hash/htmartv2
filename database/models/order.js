@@ -43,4 +43,7 @@ const orderSchema = new mongoose.Schema({
 }, { timestamps: true });
 orderSchema.index({ user: 1, customIdentifer: 1, status: 1 });
 
+// Index for sorting or querying by date
+orderSchema.index({ date: -1 });
+
 module.exports = mongoose.model('Order', orderSchema);

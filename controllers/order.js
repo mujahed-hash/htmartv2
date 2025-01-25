@@ -194,7 +194,7 @@ const getSupplierOrdersByStatus = async (supplierId, status, start = 0, limit = 
   const orders = await Order.find({
     'orderItems.product': { $in: productIds },
     status: status,
-  })
+  }).sort({ date: -1 })
     .populate({
       path: 'orderItems.product',
       populate: { path: 'user', select: 'name' },
@@ -344,7 +344,7 @@ const updateOrderStatus = async (supplierId, orderId, userId, newStatus) => {
         const orders = await Order.find({
             'orderItems.product': { $in: productIds },
             status: status // Directly use the string status here
-        })
+        }).sort({ date: -1 })
         .populate({
             path: 'orderItems.product',
             populate: {
