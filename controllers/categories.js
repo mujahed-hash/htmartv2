@@ -12,8 +12,10 @@ exports.createCategory = async (req, res) => {
         const files = req.files;
         let image = [];
         // const basePath = `${req.protocol}://${req.get('host')}/uploads/categories`;
-        const basePath = 'https://hotelmart.in/uploads/categories' ;
-
+        // const basePath = 'https://hotelmart.in/uploads/categories' ;
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const basePath = `${protocol}://${req.get('host')}/uploads/categories`;
+        
         if (files && files.length > 0) {
             files.forEach(file => {
                 image.push(`${basePath}/${file.filename}`);
