@@ -101,8 +101,9 @@ exports.updateCategory = async (req, res) => {
         }
 
         const files = req.files;
-        const basePath = `${req.protocol}://${req.get('host')}/uploads/categories`;
-        
+        // const basePath = `${req.protocol}://${req.get('host')}/uploads/categories`;
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const basePath = `${protocol}://${req.get('host')}/uploads/categories`;
         // Helper function to delete files from the local system
         const deleteFiles = (files) => {
             files.forEach(file => {
