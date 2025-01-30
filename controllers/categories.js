@@ -11,7 +11,8 @@ exports.createCategory = async (req, res) => {
         const customIdentifer = `${slugify(itemType, { lower: true })}-${randomComponent}`;
         const files = req.files;
         let image = [];
-        const basePath = `${req.protocol}://${req.get('host')}/uploads/categories`;
+        // const basePath = `${req.protocol}://${req.get('host')}/uploads/categories`;
+        const basePath = 'https://hotelmart.in/uploads/categories' ;
 
         if (files && files.length > 0) {
             files.forEach(file => {
