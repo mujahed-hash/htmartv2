@@ -12,7 +12,7 @@ const fs = require('fs');
 exports.productPost = async (req, res) => {
     try {
         // Get the user's ID from the token (req.user)
-        const userId = req.user.id;
+        const userId = req.userId;
         // const category = await Category.findOne({ customIdentifer: req.body.catCustomIdentifer });
 
    
@@ -26,8 +26,8 @@ exports.productPost = async (req, res) => {
         }
         const files = req.files;
         let images = [];
-        const basePath = `${req.protocol}://${req.get('host')}/uploads/products`;
-
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const basePath = `${protocol}://${req.get('host')}/uploads/products`;
         if (files && files.length > 0) {
             files.forEach(file => {
                 images.push(`${basePath}/${file.filename}`);
@@ -73,7 +73,8 @@ exports.createProduct = async (req, res) => {
 
     const files = req.files;
     let images = [];
-    const basePath = `${req.protocol}://${req.get('host')}/uploads/products`;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const basePath = `${protocol}://${req.get('host')}/uploads/products`;
 
     if (files) {
         files.map(file => {
@@ -525,7 +526,8 @@ exports.updateProduct = async (req, res) => {
 
                 // Handle file uploads if any
                 const files = req.files;
-                const basePath = `${req.protocol}://${req.get('host')}/uploads/products`;
+                const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+                const basePath = `${protocol}://${req.get('host')}/uploads/products`;
 
                 if (files && files.length > 0) {
                     const images = files.map(file => `${basePath}/${file.filename}`);
@@ -599,8 +601,8 @@ exports.updateAnyProduct = async (req, res) => {
         product.user = req.userId
 
         const files = req.files;
-        const basePath = `${req.protocol}://${req.get('host')}/uploads/products`;
-
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const basePath = `${protocol}://${req.get('host')}/uploads/products`;
         if (files && files.length > 0) {
             let images = files.map(file => `${basePath}/${file.filename}`);
             product.images = images;

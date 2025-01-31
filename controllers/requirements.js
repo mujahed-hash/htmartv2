@@ -227,7 +227,9 @@ const getCompletedRequirementsForSupplier = async (req, res) => {
 const postProductInfo = async (req, res) => {
     try {
         const { requirementId, name, price } = req.body;
-        const image = req.file ? `${req.protocol}://${req.get('host')}/uploads/requirements/${req.file.filename}` : '';
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+                    const image = req.file ?`${protocol}://${req.get('host')}/uploads/requirements/${req.file.filename}` : '';
+        // const image = req.file ? `${req.protocol}://${req.get('host')}/uploads/requirements/${req.file.filename}` : '';
 
         // Find the requirement by ID
         const requirement = await Requirement.findById(requirementId);
