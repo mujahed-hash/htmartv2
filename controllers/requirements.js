@@ -262,13 +262,29 @@ const postProductInfo = async (req, res) => {
         await newProductSubmission.save();
 
         // Notify the admin
-        await Notification.create({
+        const supplierNotification =   await Notification.create({
             userId: supplier._id,
             message: `Product information posted by supplier ${supplier.name} for requirement ${requirement.customIdentifier}.`,
             requirementIdentifier:requirement?.customIdentifier,
 
         });
-
+ 
+        const [supplierUnreadCount] = await Promise.all([
+            Notification.countDocuments({ userId:supplier._id, isRead: false }),
+        ]);
+    
+        const supplierSocketId = connectedUsers.get(supplier._id.toString());
+        // const supplierSocketId = connectedUsers.get(supplier?._id.toString());
+    
+        const io = getIo(); // Get io instance from socket.js
+    
+        if (supplierSocketId) {
+            io.to(supplierSocketId).emit('notification', supplierNotification);
+            io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
+            console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount))
+    
+        }
+    
         res.status(200).json({ message: 'Product information posted successfully.' });
     } catch (error) {
         res.status(500).json({ message: 'Error posting product information.', error });
@@ -297,13 +313,29 @@ const selectProductForDelivery = async (req, res) => {
         await requirement.save();
 
         // Notify admin
-        Notification.create({
+        const buyerNotification = await  Notification.create({
             userId: requirement.buyer,
             message: `Product selected for delivery: ${productId}.`,
             requirementIdentifier:requirement?.customIdentifier,
 
 
         });
+       
+        const [buyerUnreadCount] = await Promise.all([
+            Notification.countDocuments({ userId:requirement.buyer, isRead: false }),
+        ]);
+    
+        const buyerSocketId = connectedUsers.get(requirement.buyer.toString());
+        // const supplierSocketId = connectedUsers.get(supplier?._id.toString());
+    
+        const io = getIo(); // Get io instance from socket.js
+    
+        if (buyerSocketId) {
+            io.to(buyerSocketId).emit('notification', buyerNotification);
+            io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
+            console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
+    
+        }
 
         res.status(200).json({ message: 'Product selected for delivery successfully.' });
     } catch (error) {
@@ -345,13 +377,29 @@ const forwardProductInfoToBuyer = async (req, res) => {
         await requirement.save();
 
         // Notify the buyer
-        await Notification.create({
+        const buyerNotification =  await Notification.create({
             userId: productSubmission.requirement.buyer,
-            message: `Product information for your requirement ${productSubmission.requirement.customIdentifier} has been forwarded by an admin.`,
+            message: `Product information for your requirement ${productSubmission?.requirement?.customIdentifier} has been forwarded by an admin.`,
             requirementIdentifier:requirement?.customIdentifier,
 
         });
 
+       
+        const [buyerUnreadCount] = await Promise.all([
+            Notification.countDocuments({ userId:productSubmission?.requirement?.buyer, isRead: false }),
+        ]);
+    
+        const buyerSocketId = connectedUsers.get(productSubmission?.requirement?.buyer.toString());
+        // const supplierSocketId = connectedUsers.get(supplier?._id.toString());
+    
+        const io = getIo(); // Get io instance from socket.js
+    
+        if (buyerSocketId) {
+            io.to(buyerSocketId).emit('notification', buyerNotification);
+            io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
+            console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
+    
+        }
         res.status(200).json({ message: 'Product information forwarded to the buyer successfully.' });
     } catch (error) {
         res.status(500).json({ message: 'Error forwarding product information.', error });
@@ -455,7 +503,7 @@ const RequestDelivery = async (req, res) => {
         const { requirementId, submissionId } = req.body;
 
         // Find the requirement
-        const requirement = await Requirement.findById(requirementId);
+        let requirement = await Requirement.findById(requirementId);
         if (!requirement || requirement.buyer.toString() !== req.userId) {
             return res.status(404).json({ message: 'Requirement not found or not owned by the buyer.' });
         }
@@ -482,10 +530,63 @@ const RequestDelivery = async (req, res) => {
 
         });
 
+
+ // Notify the admin
+ const supplierNotification =   await Notification.create({
+    userId: productSubmission.supplier,
+    message: `Product information updated for ${requirement.customIdentifier}.`,
+    requirementIdentifier:requirement?.customIdentifier,
+
+});
+
+const [supplierUnreadCount] = await Promise.all([
+    Notification.countDocuments({ userId:productSubmission.supplier, isRead: false }),
+]);
+
+const supplierSocketId = connectedUsers.get(productSubmission.supplier.toString());
+// const supplierSocketId = connectedUsers.get(supplier?._id.toString());
+
+
+if (supplierSocketId) {
+    io.to(supplierSocketId).emit('notification', supplierNotification);
+    io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
+    console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount))
+
+}
+
+
+
+ // Notify the buyer
+ const buyerNotification =  await Notification.create({
+    userId: productSubmission.requirement.buyer,
+    message: `Product information for your requirement ${productSubmission?.requirement?.customIdentifier} has been updated.`,
+    requirementIdentifier:requirement?.customIdentifier,
+
+});
+
+
+const [buyerUnreadCount] = await Promise.all([
+    Notification.countDocuments({ userId:productSubmission?.requirement?.buyer, isRead: false }),
+]);
+
+const buyerSocketId = connectedUsers.get(productSubmission?.requirement?.buyer.toString());
+// const supplierSocketId = connectedUsers.get(supplier?._id.toString());
+
+const io = getIo(); // Get io instance from socket.js
+
+if (buyerSocketId) {
+    io.to(buyerSocketId).emit('notification', buyerNotification);
+    io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
+    console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
+
+}
         res.status(200).json({ message: 'Delivery request submitted successfully.' });
     } catch (error) {
         res.status(500).json({ message: 'Error requesting delivery.', error });
     }
+
+
+    
 };
 
 

@@ -5,6 +5,7 @@ const Product = require('../database/models/product');
 const User = require('../database/models/user');
 const slugify = require('slugify');
 const Notification = require('../database/models/notification');
+
 // const { connectedUsers } = require('../connectedusers');
 const { connectedUsers, getIo } = require('../socket'); // Import connectedUsers and getIo
 
@@ -871,14 +872,14 @@ const checkoutSingle = asyncHandler(async (req, res) => {
     // Create notifications for buyer and supplier
     const buyerNotification = {
         userId,
-        message: `Your order for ${cartItem.product.prodName} has been placed successfully.`,
+        message: `order for ${cartItem.product.prodName} has been placed successfully.`,
         orderIdentifier:customIdentifer,
         isRead: false,
     };
 
     const supplierNotification = {
         userId: supplier?._id,
-        message: `You have received a new order for your product: ${cartItem.product.prodName}.`,
+        message: `Received a new order for your product: ${cartItem.product.prodName}.`,
         orderIdentifier:customIdentifer,
         isRead: false,
     };
