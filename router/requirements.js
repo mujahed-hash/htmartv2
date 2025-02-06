@@ -120,7 +120,7 @@ router.get('/all-product-submissions',middleware.verifyToken,roleMiddleware('isA
         }
 
         // Get all product submissions
-        const productSubmissions = await ProductSubmission.find().populate('requirement supplier');
+        const productSubmissions = await ProductSubmission.find().populate('requirement supplier').sort({date:-1});
 
         res.status(200).json({ productSubmissions });
     } catch (error) {
@@ -249,7 +249,7 @@ router.post('/delivery-update', middleware.verifyToken, roleMiddleware('isAdmin'
 
 router.get('/all-requirements', middleware.verifyToken, roleMiddleware('isAdmin'), async (req, res) => {
     try {
-        const requirements = await Requirement.find().populate('buyer');
+        const requirements = await Requirement.find().populate('buyer').sort({date:-1});
         res.status(200).json(requirements);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching requirements.', error });

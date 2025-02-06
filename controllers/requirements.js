@@ -182,7 +182,7 @@ const getForwardedRequirementsForSupplier = async (req, res) => {
 
         // Find all requirements where the supplier is in the forwardedTo list
         const requirements = await Requirement.find({ forwardedTo: supplierId, status: { $in: ['Pending', 'Forwarded'] }  // Finds products with status either 'Delivered' or 'Completed'
-    });
+    }).sort({date:-1});
 
         // Map through the requirements to add a 'hasPosted' flag
         const requirementsWithPostedFlag = requirements.map(requirement => {
@@ -206,7 +206,7 @@ const getCompletedRequirementsForSupplier = async (req, res) => {
         // Find all requirements where the supplier is in the forwardedTo list
         const requirements = await Requirement.find({ forwardedTo: supplierId,            
              status: { $in: ['Delivered', 'Completed'] }  // Finds products with status either 'Delivered' or 'Completed'
-    });
+    }).sort({date:-1});
 
         // Map through the requirements to add a 'hasPosted' flag
         const requirementsWithPostedFlag = requirements.map(requirement => {
@@ -594,7 +594,7 @@ if (buyerSocketId) {
 const getRequestedSubmissions = async (req, res) => {
     try {
         // Fetch all product submissions that are requested for delivery
-        const requestedSubmissions = await ProductSubmission.find({ status: 'Requested' })
+        const requestedSubmissions = await ProductSubmission.find({ status: 'Requested' }).sort({date:-1})
             .populate({
                 path: 'requirement',
                 populate: [
@@ -643,7 +643,7 @@ const getDeliveredProductsForSupplier = async (req, res) => {
             supplier: supplierId, 
             status: { $in: ['Delivered', 'Completed'] }  // Finds products with status either 'Delivered' or 'Completed'
 
-        }).populate('requirement', 'buyer reqDetails customIdentifier')
+        }).sort({date:-1}).populate('requirement', 'buyer reqDetails customIdentifier')
           .populate('requirement.buyer', 'name phone email street city zip country');  // Populating buyer details
 
         if (!completedProducts.length) {
@@ -661,7 +661,7 @@ const getDeliveredProductsForAdmin = async (req, res) => {
   
       const completedProducts = await ProductSubmission.find({
         status: { $in: ['Delivered', 'Completed'] }
-      })
+      }).sort({date:-1})
         .populate({
           path: 'requirement',
           select: 'buyer reqDetails customIdentifier',

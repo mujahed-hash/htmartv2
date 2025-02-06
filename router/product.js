@@ -117,7 +117,7 @@ router.get('/supplier/products/search', middleware.verifyToken,roleMiddleware('i
       // Fetch matching products with pagination
       const products = await Product.find(searchConditions)
         .skip(parseInt(start))
-        .limit(parseInt(limit))
+        .limit(parseInt(limit)).sort({date:-1})
         .populate('category', 'name') // Populate category with name
         .lean();
   
