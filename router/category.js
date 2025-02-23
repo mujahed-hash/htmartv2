@@ -14,5 +14,5 @@ router.get('/categories', categoryController.listCategories);
 // Get a category by ID
 router.get('/category/:id', categoryController.getCategoryById);
 router.put('/category/:id', middleware.verifyToken,upload.array('image'), categoryController.updateCategory);
-router.delete('/category/delete-category', categoryController.deleteCategory);
+router.delete('/category/delete-category', middleware.verifyToken, categoryController.deleteCategory);
 module.exports = router;

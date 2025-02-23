@@ -151,17 +151,37 @@ exports.updateCategory = async (req, res) => {
 
 exports.deleteCategory = async (req, res) => {
     try {
-        const { id } = req.body;
-        
-        const result = await Category.findByIdAndDelete(id);
-        
-        if (!result) {
+        const id = req.body.id;
+
+        // Find the category to get image paths
+        const category = await Category.findById(id);
+
+        if (!category) {
             return res.status(404).json({ message: 'Category not found' });
         }
-        
-        res.status(200).json({ message: 'Category deleted successfully' });
+
+        // Extract and delete associated images
+        if (category.image && category.image.length > 0) {
+            category.image.forEach((imageUrl) => {
+                // Extract the filename from the full URL
+                const filename = imageUrl.split('/').pop();
+                const filePath = path.join(__dirname, '../uploads/categories/', filename); // Adjust based on actual folder
+                
+                fs.unlink(filePath, (err) => {
+                    if (err && err.code !== 'ENOENT') {
+                        console.error('Error deleting image:', err);
+                    }
+                });
+            });
+        }
+
+        // Delete category from database
+        await Category.findByIdAndDelete(id);
+
+        res.status(200).json({ message: 'Category and associated images deleted successfully' });
     } catch (error) {
         console.error(error);
         res.status(500).send('Server error');
     }
+   
 };
