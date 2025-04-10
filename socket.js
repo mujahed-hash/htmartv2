@@ -9,7 +9,7 @@ const initSocket = (server) => {
         cors: {
             // origin: 'http://localhost:4200', // Allow your frontend's origin
             origin:allowedOrigins,
-            methods: ['GET', 'POST'],
+            methods: ['GET', 'POST', 'PUT', 'DELETE'],
             credentials: true,
         },
     });
