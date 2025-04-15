@@ -3,7 +3,7 @@ const connectedUsers = new Map(); // Store user socket mappings
 const Notification = require('./database/models/notification');
 
 // Initialize Socket.io
-const allowedOrigins = ['http://13.201.119.25:3000', 'http://hotelmart.in','https://hotelmart.in', 'http://hotelmart.in:3000','http://localhost:4200'];
+const allowedOrigins = ['http://13.201.119.25:3000','http://3.108.16.14:3000', 'http://hotelmart.in','https://hotelmart.in', 'http://hotelmart.in:3000','http://localhost:4200'];
 const initSocket = (server) => {
     io = require('socket.io')(server, {
         cors: {

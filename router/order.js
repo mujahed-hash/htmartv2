@@ -37,24 +37,36 @@ router.get('/supplier/orders',middleware.verifyToken, roleMiddleware('isSupplier
     }
 });
   
+// router.get('/supplier/orders/pending', middleware.verifyToken, roleMiddleware('isSupplier'), async (req, res) => {
+//   try {
+//     const supplierId = req.userId;
+//     const start = parseInt(req.query.start) || 0;
+//     const limit = parseInt(req.query.limit) || 10;
+
+//     const { totalOrders, orders } = await OrderController.getSupplierOrdersByStatus(supplierId, 'Pending');
+//     res.status(200).json({ totalOrders, orders });
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 router.get('/supplier/orders/pending', middleware.verifyToken, roleMiddleware('isSupplier'), async (req, res) => {
   try {
     const supplierId = req.userId;
-    const start = parseInt(req.query.start) || 0;
-    const limit = parseInt(req.query.limit) || 10;
+    const { start, limit } = req.query;
 
-    const { totalOrders, orders } = await OrderController.getSupplierOrdersByStatus(supplierId, 'Pending', start, limit);
-    res.status(200).json({ totalOrders, orders });
+    const result = await OrderController.getSupplierOrdersByStatus(req, supplierId, 'Pending');
+    res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
+
   // Endpoint to get approved orders
 router.get('/supplier/orders/approved', middleware.verifyToken, roleMiddleware('isSupplier'), async (req, res) => {
     try {
       const supplierId = req.userId; // Using req.userId
-      const orders = await OrderController.getSupplierOrdersByStatus(supplierId, 'Approved');
+      const orders = await OrderController.getSupplierOrdersByStatus(req,supplierId, 'Approved');
       res.json(orders);
     } catch (error) {
       res.status(500).json({ message: error.message });
@@ -63,7 +75,7 @@ router.get('/supplier/orders/approved', middleware.verifyToken, roleMiddleware('
   router.get('/supplier/orders/delivered', middleware.verifyToken, roleMiddleware('isSupplier'), async (req, res) => {
     try {
       const supplierId = req.userId; // Using req.userId
-      const orders = await OrderController.getSupplierDeliveredOrders(supplierId);
+      const orders = await OrderController.getSupplierOrdersByStatus(req,supplierId, 'Delivered');
       res.json(orders);
     } catch (error) {
       res.status(500).json({ message: error.message });
@@ -72,7 +84,7 @@ router.get('/supplier/orders/approved', middleware.verifyToken, roleMiddleware('
   router.get('/supplier/orders/cancelled', middleware.verifyToken, roleMiddleware('isSupplier'), async (req, res) => {
     try {
       const supplierId = req.userId; // Using req.userId
-      const orders = await OrderController.getSupplierOrdersByStatus(supplierId, 'Cancelled');
+      const orders = await OrderController.getSupplierOrdersByStatus(req,supplierId, 'Cancelled');
       res.json(orders);
     } catch (error) {
       res.status(500).json({ message: error.message });

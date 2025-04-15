@@ -1,6 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Order = require('../database/models/order');
 const Product = require('../database/models/product');
+const mongoose = require('mongoose');
 
 // @desc    Get all orders for a user
 // @route   GET /api/orders
@@ -72,7 +73,8 @@ const getSupplierOrders = async (supplierId) => {
     try {
       // Find products posted by the supplier
       const supplierProducts = await Product.find({ user: supplierId }).sort({date:-1}).select('_id');
-  
+      const start = parseInt(req.query.start) || 0;
+        const limit = parseInt(req.query.limit) || 10;
       // Extract product IDs
       const productIds = supplierProducts.map(product => product._id);
   
@@ -85,14 +87,16 @@ const getSupplierOrders = async (supplierId) => {
         .populate({
           path: 'user',
           select: 'name email',
-        });
+        }) .skip(start)
+        .limit(limit);
   
       return orders;
     } catch (error) {
       console.error(error);
       throw new Error('Error fetching supplier orders');
     }
-  };
+  }
+  ;
   const getSupplierOrderCounts = async (req, res) => {
     try {
       const supplierId = req.userId;
@@ -182,34 +186,76 @@ const getSupplierOrders = async (supplierId) => {
 //       throw new Error('Error fetching supplier orders');
 //     }
 //   };
-const getSupplierOrdersByStatus = async (supplierId, status, start = 0, limit = 10) => {
-  const supplierProducts = await Product.find({ user: supplierId }).sort({ date: -1 }).select('_id');
-  const productIds = supplierProducts.map(product => product._id);
+// const getSupplierOrdersByStatus = async (supplierId, status, start = 0, limit = 10) => {
+//   const supplierProducts = await Product.find({ user: supplierId }).sort({ date: -1 }).select('_id');
+//   const productIds = supplierProducts.map(product => product._id);
 
-  if (!productIds.length) {
-    console.log('No products found for the supplier.');
-    return { totalOrders: 0, orders: [] };
-  }
+//   if (!productIds.length) {
+//     console.log('No products found for the supplier.');
+//     return { totalOrders: 0, orders: [] };
+//   }
 
-  const orders = await Order.find({
-    'orderItems.product': { $in: productIds },
-    status: status,
-  }).sort({ date: -1 })
-    .populate({
-      path: 'orderItems.product',
-      populate: { path: 'user', select: 'name' },
-      select: 'prodName prodDesc prodPrice user customIdentifer',
+//   const orders = await Order.find({
+//     'orderItems.product': { $in: productIds },
+//     status: status,
+//   }).sort({ date: -1 })
+//     .populate({
+//       path: 'orderItems.product',
+//       populate: { path: 'user', select: 'name' },
+//       select: 'prodName prodDesc prodPrice user customIdentifer',
+//     })
+//     .populate({ path: 'user', select: 'name email' })
+//     .skip(start)
+//     .limit(limit);
+
+//   const totalOrders = await Order.countDocuments({
+//     'orderItems.product': { $in: productIds },
+//     status: status, // Include the status filter
+//   });
+
+//   return { totalOrders, orders };
+// };
+
+const getSupplierOrdersByStatus = async (req, supplierId, status) => {
+  try {
+    const start = parseInt(req.query.start) || 0;
+    const limit = parseInt(req.query.limit) || 10;
+
+    // Find products associated with the supplier
+    const supplierProducts = await Product.find({ user: supplierId }).select('_id');
+    const productIds = supplierProducts.map(p => p._id);
+
+    console.log("Supplier Product IDs:", productIds); // Debugging logs
+
+    // Get the total count of orders with 'Pending' status for the supplier's products
+    const totalOrders = await Order.countDocuments({
+      'orderItems.product': { $in: productIds },
+      status,
+    });
+
+    // Get the orders with 'Pending' status, sorted by date, with pagination
+    const orders = await Order.find({
+      'orderItems.product': { $in: productIds },
+      status,
     })
-    .populate({ path: 'user', select: 'name email' })
-    .skip(start)
-    .limit(limit);
+      .sort({ date: -1 })  // Sort by most recent date
+      .skip(start)         // Pagination start
+      .limit(limit)        // Pagination limit
+      .populate({
+        path: 'orderItems.product',
+        select: 'prodName prodDesc prodPrice customIdentifer',
+      })
+      .populate({
+        path: 'user',
+        select: 'name email',
+      });
 
-  const totalOrders = await Order.countDocuments({
-    'orderItems.product': { $in: productIds },
-    status: status, // Include the status filter
-  });
-
-  return { totalOrders, orders };
+    // Return the results
+    return { totalOrders, orders };
+  } catch (error) {
+    console.error(error);
+    throw new Error('Error fetching supplier orders');
+  }
 };
 
 
