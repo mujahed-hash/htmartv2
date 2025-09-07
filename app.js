@@ -13,8 +13,12 @@ const SearchProd = require('./router/search');
 const adminSearch = require('./router/adminsearch');
 const Makerequest = require('./router/request');
 const NotificationRoute = require('./router/notification');
+const superadminRoute = require('./router/superadmin');
 const middleware = require('./helper/middleware');
 const Notification = require('./database/models/notification');
+const User = require('./database/models/user');
+const argon2 = require('argon2');
+const slugify = require('slugify');
 const path = require('path');
 
 // Import socket handling functions
@@ -109,6 +113,7 @@ app.use('/api', SearchProd);
 app.use('/api', adminSearch);
 app.use('/api', Makerequest);
 app.use('/api', NotificationRoute);
+app.use('/api/superadmin', superadminRoute);
 
 // Serve the frontend static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -118,8 +123,63 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '/public/index.html'));
 });
 
+// Function to ensure super admin exists
+async function ensureSuperAdmin() {
+  try {
+    // Check if a super admin already exists
+    const existingSuperAdmin = await User.findOne({ isSuperAdmin: true });
+    
+    if (existingSuperAdmin) {
+      console.log('Super admin already exists:', existingSuperAdmin.email);
+      return;
+    }
+    
+    // Super admin details
+    const name = 'Super Admin';
+    const email = 'superadmin@super.com';
+    const password = 'Sadmin123';
+    const phone = '1234567890';
+    
+    // Check if email already exists
+    const existingUser = await User.findOne({ email });
+    
+    if (existingUser) {
+      // Update existing user to super admin
+      existingUser.isSuperAdmin = true;
+      existingUser.isAdmin = true;
+      
+      await existingUser.save();
+      console.log('Existing user updated to super admin:', existingUser.email);
+    } else {
+      // Create new super admin user
+      const passwordHash = await argon2.hash(password);
+      const randomComponent = Date.now().toString();
+      const customIdentifier = `${slugify(name, { lower: true })}-${randomComponent}`;
+      
+      const superAdmin = new User({
+        name,
+        email,
+        passwordHash,
+        phone,
+        isAdmin: true,
+        isSuperAdmin: true,
+        customIdentifer: customIdentifier
+      });
+      
+      await superAdmin.save();
+      console.log('Super admin created automatically:', superAdmin.email);
+      console.log('Super admin credentials: Email:', email, '- Password:', password);
+    }
+  } catch (error) {
+    console.error('Error ensuring super admin exists:', error);
+  }
+}
+
 // Start the server
 const port = 3000;
-server.listen(port, function () {
+server.listen(port, async function () {
   console.log(`Express server running on http://localhost:${port}`);
+  
+  // Ensure super admin exists when server starts
+  await ensureSuperAdmin();
 });

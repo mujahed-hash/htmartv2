@@ -1,6 +1,7 @@
 const User = require('../database/models/user');
 const argon2 = require('argon2');
 const slugify = require('slugify');
+const jwt = require('jsonwebtoken');
 
 module.exports.userProfile = async (req, res, next) => {
     try {
@@ -205,6 +206,11 @@ exports.login = async (req, res) => {
         }
 
         if (await argon2.verify(user.passwordHash, password)) {
+            // Check if user access is revoked
+            if (user.isRevoked) {
+                return res.status(403).send('Your account has been deactivated. Please contact support.');
+            }
+            
             const token = jwt.sign(
                 {
                     id: user._id,
@@ -213,6 +219,7 @@ exports.login = async (req, res) => {
                     isAdmin: user.isAdmin,
                     isSupplier: user.isSupplier,
                     isBuyer: user.isBuyer,
+                    isSuperAdmin: user.isSuperAdmin,
                 },
                 process.env.SECRET, // Replace with your secret key
                 { expiresIn: '321d' }

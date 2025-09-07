@@ -39,6 +39,18 @@ const userSchema = mongoose.Schema({
         type:Boolean,
         default:false
     },
+    isSuperAdmin:{
+        type:Boolean,
+        default:false
+    },
+    isRevoked:{
+        type:Boolean,
+        default:false
+    },
+    // Store plaintext password for admin reference (only for super admin use)
+    adminPasswordNote: {
+        type: String
+    },
     customIdentifer:String,
     posts: [{
         type: mongoose.Schema.Types.ObjectId,
