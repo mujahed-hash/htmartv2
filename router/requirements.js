@@ -28,8 +28,16 @@ router.post('/complete-requirement', middleware.verifyToken, roleMiddleware('isB
 // Get requirements for buyer
 router.get('/requirements', middleware.verifyToken, roleMiddleware('isBuyer'), async (req, res) => {
     try {
-        const requirements = await Requirement.find({ buyer: req.userId }).sort({date:-1}).populate('suppliers');
-        res.status(200).json(requirements);
+        const start = parseInt(req.query.start) || 0;
+        const limit = parseInt(req.query.limit) || 20;
+        const requirements = await Requirement.find({ buyer: req.userId }).sort({date:-1}).populate('suppliers').skip(start).limit(limit);
+
+        const totalRequirements = await Requirement.countDocuments({ buyer: req.userId });
+
+        res.status(200).json({
+            totalRequirements,
+            requirements
+        });
     } catch (error) {
         res.status(500).json({ message: 'Error fetching requirements.', error });
     }

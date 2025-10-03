@@ -15,17 +15,16 @@ const sendNotification = (userId, notification) => {
 
 // Mark all notifications as admin read (Admin-specific)
 const markAllAsAdminRead = asyncHandler(async (req, res) => {
-
-    await Notification.updateMany({ adminRead: false }, { adminRead: true });
-    res.status(200).json({ message: 'All notifications marked as admin read.' });
+    const result = await Notification.updateMany({ userId: req.userId, isRead: false }, { isRead: true });
+    res.status(200).json({ message: 'All notifications marked as read.', modifiedCount: result.modifiedCount });
 });
 // Get unread notification count (Admin and user-specific)
 const getAdminUnreadNotificationCount = asyncHandler(async (req, res) => {
     let unreadCount;
 
-        // Admin counts notifications where adminRead is false
-        unreadCount = await Notification.countDocuments({ adminRead: false });
-  
+    // Admin counts their own notifications where isRead is false
+    unreadCount = await Notification.countDocuments({ userId: req.userId, isRead: false });
+
     res.status(200).json({ unreadCount });
 });
 

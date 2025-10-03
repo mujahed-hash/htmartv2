@@ -29,7 +29,10 @@ module.exports.userProfile = async (req, res, next) => {
                     country: user.country,
                     zip: user.zip,
                     street: user.street,
-                    posts: user.posts
+                    posts: user.posts,
+                    firstname: user.firstname,
+                    lastname: user.lastname,
+                    image: user.image
                 }
             });
         }
@@ -238,7 +241,7 @@ exports.login = async (req, res) => {
 
 
 exports.signUp = async (req, res) => {
-    const { name, email, password, phone, street, apartment, city, zip, country, isAdmin, isSupplier, isBuyer } = req.body;
+    const { name, email, password, phone, street, apartment, city, zip, country, isAdmin, isSupplier, isBuyer, firstname, lastname, image } = req.body;
 
     try {
         // Normalize email to lowercase
@@ -270,6 +273,9 @@ exports.signUp = async (req, res) => {
             isSupplier: isSupplier || false,
             isBuyer: isBuyer || true,
             customIdentifer: customIdentifier,
+            firstname: firstname || name, // Use provided firstname or fallback to name
+            lastname: lastname || '',     // Use provided lastname or default to empty string
+            image: image || 'assets/images/default-avatar.png', // Use provided image or default
         });
 
         // Save the user to the database
@@ -286,20 +292,37 @@ exports.signUp = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
     const { customIdentifer } = req.params;
+    const { name, firstname, lastname, email, phone, street, apartment, city, zip, country, isAdmin, isSupplier, isBuyer, image, password } = req.body;
 
     if (!customIdentifer) {
         return res.status(400).send('Custom Identifier is required');
     }
 
     try {
+        // Create an update object with only the fields that are provided in the request body
+        const updateFields = {};
+        if (name !== undefined) updateFields.name = name;
+        if (firstname !== undefined) updateFields.firstname = firstname;
+        if (lastname !== undefined) updateFields.lastname = lastname;
+        if (email !== undefined) updateFields.email = email.toLowerCase(); // Normalize email
+        if (phone !== undefined) updateFields.phone = phone;
+        if (street !== undefined) updateFields.street = street;
+        if (apartment !== undefined) updateFields.apartment = apartment;
+        if (city !== undefined) updateFields.city = city;
+        if (zip !== undefined) updateFields.zip = zip;
+        if (country !== undefined) updateFields.country = country;
+        if (isAdmin !== undefined) updateFields.isAdmin = isAdmin;
+        if (isSupplier !== undefined) updateFields.isSupplier = isSupplier;
+        if (isBuyer !== undefined) updateFields.isBuyer = isBuyer;
+        if (image !== undefined) updateFields.image = image;
+
         // Check if password is being updated, and hash it if so
-        if (req.body.password) {
-            req.body.passwordHash = await argon2.hash(req.body.password);
-            delete req.body.password; // Remove the plain text password from the body
+        if (password) {
+            updateFields.passwordHash = await argon2.hash(password);
         }
 
         // Find the user by customIdentifer and update their details
-        const user = await User.findOneAndUpdate({ customIdentifer }, req.body, { new: true });
+        const user = await User.findOneAndUpdate({ customIdentifer }, updateFields, { new: true });
 
         if (!user) {
             return res.status(404).send('User not found');
@@ -307,7 +330,8 @@ exports.updateUser = async (req, res) => {
 
         res.send(user);
     } catch (error) {
-        res.send('Failed to update user details', error);
+        console.error('Error updating user details:', error);
+        res.status(500).send('Failed to update user details');
     }
 };
 

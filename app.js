@@ -101,6 +101,8 @@ app.use(express.urlencoded({ limit: '80mb', extended: true }));
 app.use('/uploads/products', express.static(path.join(__dirname, '/uploads/products')));
 app.use('/uploads/categories', express.static(path.join(__dirname, '/uploads/categories')));
 app.use('/uploads/requirements', express.static(path.join(__dirname, '/uploads/requirements/')));
+app.use('/uploads/services', express.static(path.join(__dirname, '/uploads/services'))); // Add static path for services
+app.use('/uploads/service-categories', express.static(path.join(__dirname, '/uploads/service-categories'))); // Add static path for service categories
 
 // API routes
 app.use('/api', userRoute);
@@ -114,6 +116,10 @@ app.use('/api', adminSearch);
 app.use('/api', Makerequest);
 app.use('/api', NotificationRoute);
 app.use('/api/superadmin', superadminRoute);
+app.use('/api', require('./router/service')); // Add the service route
+app.use('/api', require('./router/serviceCategory')); // Add the service category route
+app.use('/api', require('./router/serviceOrder')); // Add the service order route
+app.use('/api/admin', require('./router/adminServiceOrder')); // Add the admin service order route
 
 // Serve the frontend static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -139,6 +145,9 @@ async function ensureSuperAdmin() {
     const email = 'superadmin@super.com';
     const password = 'Sadmin123';
     const phone = '1234567890';
+    const firstname = 'Super'; // Add firstname
+    const lastname = 'Admin'; // Add lastname
+    const image = 'assets/images/default-avatar.png'; // Add default image
     
     // Check if email already exists
     const existingUser = await User.findOne({ email });
@@ -147,6 +156,9 @@ async function ensureSuperAdmin() {
       // Update existing user to super admin
       existingUser.isSuperAdmin = true;
       existingUser.isAdmin = true;
+      existingUser.firstname = firstname; // Update firstname
+      existingUser.lastname = lastname;   // Update lastname
+      existingUser.image = image;         // Update image
       
       await existingUser.save();
       console.log('Existing user updated to super admin:', existingUser.email);
@@ -163,7 +175,10 @@ async function ensureSuperAdmin() {
         phone,
         isAdmin: true,
         isSuperAdmin: true,
-        customIdentifer: customIdentifier
+        customIdentifer: customIdentifier,
+        firstname: firstname, // Set firstname for new super admin
+        lastname: lastname,   // Set lastname for new super admin
+        image: image          // Set image for new super admin
       });
       
       await superAdmin.save();

@@ -25,14 +25,21 @@ const totalOrders = await Order.countDocuments();
 });
 
 const getOrders = asyncHandler(async (req, res) => {
-  const orders = await Order.find({ user: req.userId }).sort({date:-1}).populate('orderItems.product', 'prodName prodPrice images customIdentifer');
+  const start = parseInt(req.query.start) || 0;
+  const limit = parseInt(req.query.limit) || 20;
+  const orders = await Order.find({ user: req.userId }).sort({date:-1}).populate('orderItems.product', 'prodName prodPrice images customIdentifer').skip(start).limit(limit);
+
+  const totalOrders = await Order.countDocuments({ user: req.userId });
 
   if (!orders) {
       res.status(404);
       throw new Error('No orders found');
   }
 
-  res.json(orders);
+  res.status(200).json({
+    totalOrders,
+    orders
+  });
 });
 
 // @desc    Get a single order by ID

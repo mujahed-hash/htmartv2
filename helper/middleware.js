@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const User = require('../database/models/user');
 // const authorize = jwt({
 //     secret: process.env.secret,
 //     userProperty: 'payload',
@@ -19,8 +20,16 @@ module.exports.verifyToken = async (req, res, next) => {
     try {
         // console.log('Token received:', token);
         const decoded = jwt.verify(token, process.env.SECRET);
-        // console.log('Token decoded:', decoded);
-        req.user = decoded;
+
+        // Fetch the user from the database to get up-to-date role information
+        const user = await User.findById(decoded.userId).select('-password'); // Exclude password
+
+        if (!user) {
+            console.error('User not found in database for token userId:', decoded.userId);
+            return res.status(401).send('User not found.');
+        }
+
+        req.user = user;
         req.userId = decoded.userId;
         next();
     } catch (ex) {

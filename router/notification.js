@@ -9,13 +9,38 @@ const notificationsController = require('../controllers/notifications');
 
 router.use(middleware.verifyToken);
 router.get('/notifications',async(req,res)=>{
-    const notification = await Notification.find({userId:req.userId}).sort({date:-1}).populate({
-        path:'userId',
-        select:'name'
-    })
+    try {
+        console.log('Backend: Fetching notifications for userId:', req.userId);
+        console.log('Backend: Pagination params - start:', req.query.start, 'limit:', req.query.limit);
 
-    res.send(notification);
+        const start = parseInt(req.query.start) || 0;
+        const limit = parseInt(req.query.limit) || 20;
 
+        console.log('Backend: Querying notifications for userId:', req.userId, 'typeof:', typeof req.userId);
+
+        // Debug: Check if any notifications exist at all
+        const allNotificationsCount = await Notification.countDocuments({});
+        console.log('Backend: Total notifications in DB:', allNotificationsCount);
+
+        const notifications = await Notification.find({userId: req.userId}).sort({date:-1}).populate({
+            path:'userId',
+            select:'name'
+        }).skip(start).limit(limit);
+
+        const totalNotifications = await Notification.countDocuments({userId: req.userId});
+
+        console.log('Backend: Query results - notifications.length:', notifications.length, 'totalNotifications:', totalNotifications);
+
+        console.log('Backend: Found notifications:', notifications.length, 'Total:', totalNotifications);
+        console.log('Backend: Notifications data:', notifications);
+
+        res.status(200).json({
+            totalNotifications,
+            notifications
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching notifications.', error });
+    }
 })
 
 // Get unread count for the authenticated user
@@ -39,8 +64,23 @@ router.put('/mark-all-read', async (req, res) => {
 });
 
 router.get('/admin/noitifications',middleware.verifyToken, roleMiddleware('isAdmin'), async(req,res)=>{
-    const notifications = await Notification.find().sort({date:-1});
-    res.send(notifications);
+    try {
+        const start = parseInt(req.query.start) || 0;
+        const limit = parseInt(req.query.limit) || 20;
+        const notifications = await Notification.find({ userId: req.userId }).sort({date:-1}).populate({
+            path:'userId',
+            select:'name'
+        }).skip(start).limit(limit);
+
+        const totalNotifications = await Notification.countDocuments({userId: req.userId});
+
+        res.status(200).json({
+            totalNotifications,
+            notifications
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching admin notifications.', error });
+    }
 })
 
 router.post('/notifications', asyncHandler(notificationsController.triggerNotification));

@@ -13,11 +13,17 @@ const { connectedUsers, getIo } = require('../socket'); // Import connectedUsers
 // @route   GET /api/cart
 // @access  Private
 const getCart = asyncHandler(async (req, res) => {
-    const cart = await Cart.findOne({ user: req.userId }).sort({date:-1}).populate('items.product', 'prodName prodPrice prodSize countInStock images');
+    let cart = await Cart.findOne({ user: req.userId }).sort({date:-1}).populate('items.product', 'prodName prodPrice prodSize countInStock images');
 
     if (!cart) {
-        res.status(404);
-        throw new Error('Cart not found');
+        // Create a new empty cart for the user instead of throwing an error
+        cart = new Cart({
+            user: req.userId,
+            items: [],
+            totalPrice: 0
+        });
+        await cart.save();
+        console.log(`Created new empty cart for user ${req.userId}`);
     }
 
     res.json(cart);
@@ -44,6 +50,13 @@ const addItemToCart = asyncHandler(async (req, res) => {
       }
   
       await cart.save();
+      // Emit real-time update for cart count
+      const io = getIo();
+      const buyerSocketId = connectedUsers.get(userId.toString());
+      if (buyerSocketId) {
+          const itemCount = cart.items.reduce((total, item) => total + item.quantity, 0);
+          io.to(buyerSocketId).emit('cartCountUpdate', itemCount);
+      }
       res.json(cart);
     } else {
       // If no cart exists, create a new one
@@ -53,6 +66,13 @@ const addItemToCart = asyncHandler(async (req, res) => {
       });
   
       const createdCart = await newCart.save();
+      // Emit real-time update for cart count
+      const io = getIo();
+      const buyerSocketId = connectedUsers.get(userId.toString());
+      if (buyerSocketId) {
+          const itemCount = createdCart.items.reduce((total, item) => total + item.quantity, 0);
+          io.to(buyerSocketId).emit('cartCountUpdate', itemCount);
+      }
       res.status(201).json(createdCart);
     }
   });
@@ -931,6 +951,14 @@ const removeCartItem = asyncHandler(async (req, res) => {
 
     cart.items.splice(itemIndex, 1);
     await cart.save();
+
+    // Emit real-time update for cart count
+    const io = getIo();
+    const buyerSocketId = connectedUsers.get(req.userId.toString());
+    if (buyerSocketId) {
+        const itemCount = cart.items.reduce((total, item) => total + item.quantity, 0);
+        io.to(buyerSocketId).emit('cartCountUpdate', itemCount);
+    }
 
     res.status(200).json({ message: 'Cart item removed successfully' });
 });
