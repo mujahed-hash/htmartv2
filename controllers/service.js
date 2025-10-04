@@ -9,6 +9,11 @@ const jwt = require('jsonwebtoken');
 
 exports.createService = async (req, res) => {
     try {
+        console.log('Backend: Service creation request received');
+        console.log('Backend: Request body:', req.body);
+        console.log('Backend: Request files:', req.files);
+        console.log('Backend: User ID:', req.userId);
+
         const userId = req.userId;
         const { serviceName, serviceDesc, price, categoryCustomIdentifier, availableRegions, contactPhone, contactEmail } = req.body;
 
@@ -50,8 +55,8 @@ exports.createService = async (req, res) => {
                 email: contactEmail || '',
             },
             customIdentifier: `${slugify(serviceName, { lower: true, strict: true })}-${Date.now()}`,
-            isApproved: false, // Default to false, requires admin approval
-            isActive: true, // Default to active once approved (or by default)
+            isApproved: true, // Auto-approve for immediate visibility
+            isActive: true, // Default to active
         });
 
         const savedService = await service.save();
@@ -151,11 +156,26 @@ exports.getActiveServices = async (req, res) => {
         const { categoryCustomIdentifier, search, region, start = 0, limit = 10 } = req.query;
         console.log(`getActiveServices: Received start=${start}, limit=${limit}, region=${region}`); // Added log
         
-        // Base filter - only active and approved services
+        // Base filter - only services that are BOTH active AND approved (for public marketplace)
         let filter = {
             isActive: true,
             isApproved: true
         };
+
+        // If user is authenticated, also include their own services for management (even if not approved)
+        if (userId) {
+            filter = {
+                $or: [
+                    {
+                        isActive: true,
+                        isApproved: true // Public marketplace filter
+                    },
+                    {
+                        user: userId // Include services owned by the authenticated user (for management)
+                    }
+                ]
+            };
+        }
 
         // Optional category filter
         if (categoryCustomIdentifier) {
