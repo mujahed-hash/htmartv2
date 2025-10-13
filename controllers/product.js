@@ -536,6 +536,11 @@ exports.getProductsWithFilters = async (req, res) => {
         // Total count for pagination
         const totalProducts = await Product.countDocuments(filter);
 
+        console.log(`Search results: Found ${productsWithCartStatus.length} products out of ${totalProducts} total`);
+        if (req.query.search) {
+            console.log(`Search query "${req.query.search}" returned ${totalProducts} results`);
+        }
+
         res.status(200).json({
             success: true,
             totalProducts,
@@ -552,7 +557,8 @@ exports.getProductsWithFilters = async (req, res) => {
                 },
                 condition: req.query.condition || 'all',
                 brand: req.query.brand || 'all',
-                businessType: req.query.businessType || 'all'
+                businessType: req.query.businessType || 'all',
+                search: req.query.search || 'none'
             },
             products: productsWithCartStatus
         });
