@@ -413,8 +413,8 @@ exports.getProductsWithFilters = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const userId = req.userId;
 
-        // Build filter object
-        const filter = {
+        // Build base filter object
+        const baseFilter = {
             countInStock: { $gt: 0 },
             isActive: true
         };
@@ -422,66 +422,79 @@ exports.getProductsWithFilters = async (req, res) => {
         // Location filtering (cities - can be multiple)
         if (req.query.cities && req.query.cities.trim() !== '') {
             const cities = req.query.cities.split(',').map(city => city.trim());
-            filter['locations.cityCode'] = { $in: cities };
+            baseFilter['locations.cityCode'] = { $in: cities };
         }
 
         // State filtering (can be multiple)
         if (req.query.states && req.query.states.trim() !== '') {
             const states = req.query.states.split(',').map(state => state.trim());
-            filter['locations.stateCode'] = { $in: states };
+            baseFilter['locations.stateCode'] = { $in: states };
         }
 
         // Category filtering (can be multiple category IDs)
         if (req.query.categories && req.query.categories.trim() !== '') {
             const categories = req.query.categories.split(',').map(cat => cat.trim());
-            filter.category = { $in: categories };
+            baseFilter.category = { $in: categories };
         }
 
         // Price range filtering
         if (req.query.minPrice || req.query.maxPrice) {
-            filter.prodPrice = {};
+            baseFilter.prodPrice = {};
             if (req.query.minPrice) {
-                filter.prodPrice.$gte = parseFloat(req.query.minPrice);
+                baseFilter.prodPrice.$gte = parseFloat(req.query.minPrice);
             }
             if (req.query.maxPrice) {
-                filter.prodPrice.$lte = parseFloat(req.query.maxPrice);
+                baseFilter.prodPrice.$lte = parseFloat(req.query.maxPrice);
             }
         }
 
         // Condition filtering (new, like-new, good, fair, refurbished)
         if (req.query.condition && req.query.condition.trim() !== '') {
             const conditions = req.query.condition.split(',').map(c => c.trim());
-            filter.condition = { $in: conditions };
+            baseFilter.condition = { $in: conditions };
         }
 
         // Brand filtering (can be multiple)
         if (req.query.brand && req.query.brand.trim() !== '') {
             const brands = req.query.brand.split(',').map(b => b.trim());
-            filter.brand = { $in: brands };
+            baseFilter.brand = { $in: brands };
         }
 
         // Business Type filtering
         if (req.query.businessType && req.query.businessType.trim() !== '') {
             const businessTypes = req.query.businessType.split(',').map(bt => bt.trim());
-            filter.businessType = { $in: businessTypes };
+            baseFilter.businessType = { $in: businessTypes };
         }
 
         // Delivery filtering
         if (req.query.freeDelivery === 'true') {
-            filter.freeDeliveryAbove = { $exists: true, $ne: null };
+            baseFilter.freeDeliveryAbove = { $exists: true, $ne: null };
         }
 
-        // Text search (product name, description, tags, brand) using regex
+        // Build final filter with search
+        let filter;
         if (req.query.search && req.query.search.trim() !== '') {
             const searchTerm = req.query.search.trim();
             console.log('Search term received:', searchTerm);
-            filter.$or = [
-                { prodName: { $regex: searchTerm, $options: 'i' } },
-                { prodDesc: { $regex: searchTerm, $options: 'i' } },
-                { brand: { $regex: searchTerm, $options: 'i' } },
-                { tags: { $elemMatch: { $regex: searchTerm, $options: 'i' } } }
-            ];
-            console.log('Search filter applied:', JSON.stringify(filter.$or, null, 2));
+            
+            // Combine base filters with search using $and
+            filter = {
+                $and: [
+                    baseFilter,
+                    {
+                        $or: [
+                            { prodName: { $regex: searchTerm, $options: 'i' } },
+                            { prodDesc: { $regex: searchTerm, $options: 'i' } },
+                            { brand: { $regex: searchTerm, $options: 'i' } },
+                            { tags: { $in: [new RegExp(searchTerm, 'i')] } }
+                        ]
+                    }
+                ]
+            };
+            console.log('Search filter applied with $and structure');
+        } else {
+            // No search, use base filter only
+            filter = baseFilter;
         }
 
         // Sorting
