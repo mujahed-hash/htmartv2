@@ -471,9 +471,17 @@ exports.getProductsWithFilters = async (req, res) => {
             filter.freeDeliveryAbove = { $exists: true, $ne: null };
         }
 
-        // Text search (product name, description, tags)
+        // Text search (product name, description, tags, brand) using regex
         if (req.query.search && req.query.search.trim() !== '') {
-            filter.$text = { $search: req.query.search };
+            const searchTerm = req.query.search.trim();
+            console.log('Search term received:', searchTerm);
+            filter.$or = [
+                { prodName: { $regex: searchTerm, $options: 'i' } },
+                { prodDesc: { $regex: searchTerm, $options: 'i' } },
+                { brand: { $regex: searchTerm, $options: 'i' } },
+                { tags: { $elemMatch: { $regex: searchTerm, $options: 'i' } } }
+            ];
+            console.log('Search filter applied:', JSON.stringify(filter.$or, null, 2));
         }
 
         // Sorting
@@ -498,7 +506,7 @@ exports.getProductsWithFilters = async (req, res) => {
                 sortOption = { date: sortOrder };
         }
 
-        console.log('Filter object:', JSON.stringify(filter, null, 2));
+        console.log('Final filter object:', JSON.stringify(filter, null, 2));
         console.log('Sort option:', sortOption);
 
         // Fetch products with filters
