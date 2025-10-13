@@ -11,19 +11,69 @@ const fs = require('fs');
 
 exports.productPost = async (req, res) => {
     try {
+        console.log('📦 Product POST request received');
+        console.log('Request body keys:', Object.keys(req.body));
+        console.log('Files received:', req.files?.length || 0);
+        
         // Get the user's ID from the token (req.user)
         const userId = req.userId;
-        // const category = await Category.findOne({ customIdentifer: req.body.catCustomIdentifer });
 
-   
-        // Log the entire request body for debugging purposes
-        // console.log('Request Body:', req.body);
-
-        const { prodName, prodDesc, category,prodPrice, countInStock, prodSize } = req.body;
-        console.log('Category:', category); // Log category to see if it's being received correctly
+        const { 
+            prodName, prodDesc, category, prodPrice, countInStock, prodSize,
+            // New enhanced fields
+            brand, condition, minOrderQuantity, maxOrderQuantity, businessType,
+            deliveryAvailable, estimatedDeliveryDays, freeDeliveryAbove, tags, locations
+        } = req.body;
+        
+        console.log('📋 Product details:', {
+            prodName,
+            category,
+            prodPrice,
+            countInStock,
+            prodSize,
+            brand,
+            condition,
+            businessType
+        });
+        
         if (!category) {
-            return res.status(500).json({ error: 'Invalid category custom identifier' });
+            console.error('❌ Category is missing');
+            return res.status(400).json({ error: 'Category is required' });
         }
+
+        // Handle category - if it's a string (customIdentifer), find the ObjectId
+        let categoryId = category;
+        if (typeof category === 'string' && !category.match(/^[0-9a-fA-F]{24}$/)) {
+            console.log('🔍 Category is a string, looking up by customIdentifer:', category);
+            const categoryDoc = await Category.findOne({
+                $or: [
+                    { customIdentifer: category },
+                    { customIdentifier: category } // Handle typo in field name
+                ]
+            });
+            if (!categoryDoc) {
+                console.error('❌ Category not found:', category);
+                return res.status(400).json({ error: 'Invalid category identifier' });
+            }
+            categoryId = categoryDoc._id;
+            console.log('✅ Found category ObjectId:', categoryId);
+        }
+
+        // Parse JSON fields
+        console.log('📍 Locations raw:', locations);
+        console.log('🏷️ Tags raw:', tags);
+        
+        const parsedLocations = locations ? JSON.parse(locations) : [];
+        const parsedTags = tags ? JSON.parse(tags) : [];
+        
+        console.log('📍 Parsed locations:', parsedLocations);
+        console.log('🏷️ Parsed tags:', parsedTags);
+
+        // Validate locations
+        if (!parsedLocations || parsedLocations.length === 0) {
+            return res.status(400).json({ error: 'At least one location is required' });
+        }
+
         const files = req.files;
         let images = [];
         const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -34,33 +84,61 @@ exports.productPost = async (req, res) => {
             });
         }
 
-        const randomComponent = Date.now().toString(); // You can replace this with your own logic
+        const randomComponent = Date.now().toString();
         const customIdentifer = `${slugify(prodName, { lower: true })}-${randomComponent}`;
+        
         const post = new Product({
-            category: category, // Using the found category ID
-            user: req.userId, // Set the user's ID for the post
+            // Existing fields
+            category: categoryId, // Use the resolved ObjectId
+            user: req.userId,
             prodName,
             prodDesc,
             customIdentifer,
             images: images,
             prodPrice,
             countInStock,
-            prodSize
+            prodSize,
+
+            // New enhanced fields
+            locations: parsedLocations,
+            brand: brand || '',
+            condition: condition || 'new',
+            minOrderQuantity: minOrderQuantity || 1,
+            maxOrderQuantity: maxOrderQuantity || null,
+            businessType: businessType || 'supplier',
+            deliveryAvailable: deliveryAvailable === 'true' || deliveryAvailable === true,
+            estimatedDeliveryDays: estimatedDeliveryDays || 7,
+            freeDeliveryAbove: freeDeliveryAbove || null,
+            tags: parsedTags,
+            isActive: true,
+            views: 0
         });
 
+        console.log('💾 Saving product to database...');
         const postData = await post.save();
-        console.log("Post Data ID:", postData._id); // Log Post Data ID
+        console.log("✅ Product saved successfully! ID:", postData._id);
 
+        console.log('👤 Updating user posts...');
         await User.findByIdAndUpdate(
             req.userId,
             { $push: { posts: postData._id } },
-            { new: true } // Return the updated document
+            { new: true }
         );
 
+        console.log('✅ Product creation complete!');
         res.status(200).json(postData);
     } catch (error) {
-        console.error('Error:', error);
-        res.status(500).send('Server error');
+        console.error('❌ Error creating product:', error);
+        console.error('Error stack:', error.stack);
+        
+        let errorMessage = 'Server error while creating product';
+        if (error.name === 'ValidationError') {
+            errorMessage = 'Validation error: ' + Object.values(error.errors).map(e => e.message).join(', ');
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        res.status(500).json({ error: errorMessage });
     }
 };
 
@@ -201,7 +279,7 @@ exports.getProductsByUser = async (req, res) => {
 
             return res.status(400).send('Invalid user ID.');
         }
-        const totalProducts = await Product.countDocuments({ userId: userId, countInStock: { $gte: 1 } });
+        const totalProducts = await Product.countDocuments({ user: userId, countInStock: { $gte: 1 } });
 
         // Query products by user ID
         const products = await Product.find({ user: userId }).sort({date:-1}).select('prodName images prodPrice customIdentifer')     .skip(start)
@@ -282,7 +360,7 @@ exports.getProducts = async (req, res) => {
         // Fetch the products with pagination
         const products = await Product.find({ countInStock: { $gt: 1 } })
             .sort({ date: -1 })
-            .select('prodName images customIdentifer prodDesc countInStock prodSize prodPrice')
+            .select('prodName images customIdentifer prodDesc countInStock prodSize prodPrice locations') // Added 'locations'
             .skip(start)
             .limit(limit);
 
@@ -306,16 +384,177 @@ exports.getProducts = async (req, res) => {
         });
 
         // Total number of products in the database
-        const totalProducts = await Product.countDocuments({ countInStock: { $gt: 0 } });
+        const totalProducts = await Product.countDocuments({ countInStock: { $gt: 1 } }); // Changed $gt: 0 to $gt: 1
 
-        // Send the response with total products and the modified products array
+        // Check if there are more products available
+        const hasMore = (start + limit) < totalProducts;
+
+        // Send the response with total products, hasMore flag, and the modified products array
         res.status(200).json({
             totalProducts,
+            hasMore,
             products: productsWithCartStatus
         });
     } catch (error) {
         console.error('Error fetching products:', error);
         res.status(500).json({ message: error.message });
+    }
+};
+
+/**
+ * Advanced Product Filtering with multi-location support
+ * GET /api/products/filter
+ * Query params: start, limit, cities, states, categories, minPrice, maxPrice, 
+ *               condition, brand, businessType, sortBy, sortOrder, search
+ */
+exports.getProductsWithFilters = async (req, res) => {
+    try {
+        const start = parseInt(req.query.start) || 0;
+        const limit = parseInt(req.query.limit) || 10;
+        const userId = req.userId;
+
+        // Build filter object
+        const filter = {
+            countInStock: { $gt: 0 },
+            isActive: true
+        };
+
+        // Location filtering (cities - can be multiple)
+        if (req.query.cities && req.query.cities.trim() !== '') {
+            const cities = req.query.cities.split(',').map(city => city.trim());
+            filter['locations.cityCode'] = { $in: cities };
+        }
+
+        // State filtering (can be multiple)
+        if (req.query.states && req.query.states.trim() !== '') {
+            const states = req.query.states.split(',').map(state => state.trim());
+            filter['locations.stateCode'] = { $in: states };
+        }
+
+        // Category filtering (can be multiple category IDs)
+        if (req.query.categories && req.query.categories.trim() !== '') {
+            const categories = req.query.categories.split(',').map(cat => cat.trim());
+            filter.category = { $in: categories };
+        }
+
+        // Price range filtering
+        if (req.query.minPrice || req.query.maxPrice) {
+            filter.prodPrice = {};
+            if (req.query.minPrice) {
+                filter.prodPrice.$gte = parseFloat(req.query.minPrice);
+            }
+            if (req.query.maxPrice) {
+                filter.prodPrice.$lte = parseFloat(req.query.maxPrice);
+            }
+        }
+
+        // Condition filtering (new, like-new, good, fair, refurbished)
+        if (req.query.condition && req.query.condition.trim() !== '') {
+            const conditions = req.query.condition.split(',').map(c => c.trim());
+            filter.condition = { $in: conditions };
+        }
+
+        // Brand filtering (can be multiple)
+        if (req.query.brand && req.query.brand.trim() !== '') {
+            const brands = req.query.brand.split(',').map(b => b.trim());
+            filter.brand = { $in: brands };
+        }
+
+        // Business Type filtering
+        if (req.query.businessType && req.query.businessType.trim() !== '') {
+            const businessTypes = req.query.businessType.split(',').map(bt => bt.trim());
+            filter.businessType = { $in: businessTypes };
+        }
+
+        // Delivery filtering
+        if (req.query.freeDelivery === 'true') {
+            filter.freeDeliveryAbove = { $exists: true, $ne: null };
+        }
+
+        // Text search (product name, description, tags)
+        if (req.query.search && req.query.search.trim() !== '') {
+            filter.$text = { $search: req.query.search };
+        }
+
+        // Sorting
+        let sortOption = {};
+        const sortBy = req.query.sortBy || 'date';
+        const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+
+        switch (sortBy) {
+            case 'price':
+                sortOption = { prodPrice: sortOrder };
+                break;
+            case 'rating':
+                sortOption = { averageRating: sortOrder };
+                break;
+            case 'views':
+                sortOption = { views: sortOrder };
+                break;
+            case 'name':
+                sortOption = { prodName: sortOrder };
+                break;
+            default:
+                sortOption = { date: sortOrder };
+        }
+
+        console.log('Filter object:', JSON.stringify(filter, null, 2));
+        console.log('Sort option:', sortOption);
+
+        // Fetch products with filters
+        const products = await Product.find(filter)
+            .sort(sortOption)
+            .populate('category')
+            .populate('user', 'name email')
+            .skip(start)
+            .limit(limit);
+
+        // Fetch user's cart
+        const cart = await Cart.findOne({ user: userId });
+
+        // Add cart status to products
+        const productsWithCartStatus = products.map(product => {
+            const itemIndex = cart ? cart.items.findIndex(item => 
+                item.product.toString() === product._id.toString()
+            ) : -1;
+            const isInCart = itemIndex !== -1;
+
+            return {
+                ...product._doc,
+                inCart: isInCart
+            };
+        });
+
+        // Total count for pagination
+        const totalProducts = await Product.countDocuments(filter);
+
+        res.status(200).json({
+            success: true,
+            totalProducts,
+            currentPage: Math.floor(start / limit) + 1,
+            totalPages: Math.ceil(totalProducts / limit),
+            hasMore: (start + limit) < totalProducts,
+            filters: {
+                cities: req.query.cities || 'all',
+                states: req.query.states || 'all',
+                categories: req.query.categories || 'all',
+                priceRange: {
+                    min: req.query.minPrice || 0,
+                    max: req.query.maxPrice || 'unlimited'
+                },
+                condition: req.query.condition || 'all',
+                brand: req.query.brand || 'all',
+                businessType: req.query.businessType || 'all'
+            },
+            products: productsWithCartStatus
+        });
+    } catch (error) {
+        console.error('Error fetching filtered products:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Failed to fetch products',
+            error: error.message 
+        });
     }
 };
 
@@ -477,14 +716,31 @@ exports.getProductByCustomIdentifier = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const userId = req.userId; // Assuming req.user is populated by authentication middleware
+        const userId = req.userId;
         const { customIdentifer } = req.params;
-        const { prodName, prodDesc, prodPrice, countInStock, prodSize } = req.body;
+        const { 
+            prodName, prodDesc, prodPrice, countInStock, prodSize,
+            // New enhanced fields
+            brand, condition, minOrderQuantity, maxOrderQuantity, businessType,
+            deliveryAvailable, estimatedDeliveryDays, freeDeliveryAbove, tags, locations
+        } = req.body;
 
-        // Validate category
-        const category = await Category.findById(req.body.category);
-        if (!category) {
-            return res.status(400).json({ error: 'Invalid category' });
+        // Handle category - if it's a string (customIdentifer), find the ObjectId
+        let categoryId = req.body.category;
+        if (typeof req.body.category === 'string' && !req.body.category.match(/^[0-9a-fA-F]{24}$/)) {
+            console.log('🔍 Update: Category is a string, looking up by customIdentifer:', req.body.category);
+            const categoryDoc = await Category.findOne({
+                $or: [
+                    { customIdentifer: req.body.category },
+                    { customIdentifier: req.body.category } // Handle typo in field name
+                ]
+            });
+            if (!categoryDoc) {
+                console.error('❌ Update: Category not found:', req.body.category);
+                return res.status(400).json({ error: 'Invalid category identifier' });
+            }
+            categoryId = categoryDoc._id;
+            console.log('✅ Update: Found category ObjectId:', categoryId);
         }
 
         // Validate custom identifier
@@ -494,10 +750,10 @@ exports.updateProduct = async (req, res) => {
 
         // Find product by custom identifier and populate user field
         let product = await Product.findOne({ customIdentifer }).populate('user');
-        // Debugging logs
         console.log('Product:', product);
         console.log('User ID:', userId);
         console.log('Product User:', product.user);
+        
         if (!product) {
             return res.status(404).json({ error: 'Product not found' });
         }
@@ -516,13 +772,35 @@ exports.updateProduct = async (req, res) => {
                     isUpdated = true;
                 }
 
-                // Update product details
+                // Update existing product details
                 product.prodName = prodName || product.prodName;
                 product.prodDesc = prodDesc || product.prodDesc;
-                product.category = category || product.category;
+                product.category = categoryId || product.category;
                 product.prodPrice = prodPrice || product.prodPrice;
                 product.countInStock = countInStock || product.countInStock;
                 product.prodSize = prodSize || product.prodSize;
+
+                // Update enhanced fields
+                if (locations) {
+                    const parsedLocations = JSON.parse(locations);
+                    if (parsedLocations && parsedLocations.length > 0) {
+                        product.locations = parsedLocations;
+                    }
+                }
+                
+                if (tags) {
+                    product.tags = JSON.parse(tags);
+                }
+                
+                product.brand = brand !== undefined ? brand : product.brand;
+                product.condition = condition || product.condition;
+                product.minOrderQuantity = minOrderQuantity || product.minOrderQuantity;
+                product.maxOrderQuantity = maxOrderQuantity || product.maxOrderQuantity;
+                product.businessType = businessType || product.businessType;
+                product.deliveryAvailable = deliveryAvailable === 'true' || deliveryAvailable === true;
+                product.estimatedDeliveryDays = estimatedDeliveryDays || product.estimatedDeliveryDays;
+                product.freeDeliveryAbove = freeDeliveryAbove || product.freeDeliveryAbove;
+                product.lastUpdated = new Date();
 
                 // Handle file uploads if any
                 const files = req.files;

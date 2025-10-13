@@ -118,6 +118,12 @@ app.use('/api', NotificationRoute);
 app.use('/api/superadmin', superadminRoute);
 app.use('/api', require('./router/service')); // Add the service route
 app.use('/api', require('./router/serviceCategory')); // Add the service category route
+
+// Location routes (public - no authentication required)
+console.log('📍 Registering location routes at /api/locations');
+const locationRouter = require('./router/location');
+app.use('/api/locations', locationRouter);
+
 app.use('/api', require('./router/serviceOrder')); // Add the service order route
 app.use('/api/admin', require('./router/adminServiceOrder')); // Add the admin service order route
 

@@ -114,4 +114,4 @@ serviceSchema.set('toObject', { virtuals: true });
 
 const Service = mongoose.model('Service', serviceSchema);
 
-exports.Service = Service;
+module.exports = Service;

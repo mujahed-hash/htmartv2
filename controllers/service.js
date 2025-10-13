@@ -1,4 +1,4 @@
-const { Service } = require('../database/models/service');
+const Service = require('../database/models/service');
 const User = require('../database/models/user');
 const ServiceCategory = require('../database/models/serviceCategory');
 const slugify = require('slugify');

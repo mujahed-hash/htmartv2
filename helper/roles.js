@@ -3,12 +3,29 @@ const roleMiddleware = (role) => {
         console.log('Checking role:', role);
         if (req.user) {
             let hasPermission = false;
-            if (role === 'isAdmin') {
-                hasPermission = req.user.isAdmin === true || req.user.isSuperAdmin === true;
-            } else if (role === 'isSuperAdmin') {
-                hasPermission = req.user.isSuperAdmin === true;
+
+            // Handle array of roles (for multiple role access)
+            if (Array.isArray(role)) {
+                hasPermission = role.some(r => {
+                    if (r === 'isAdmin') {
+                        return req.user.isAdmin === true || req.user.isSuperAdmin === true;
+                    } else if (r === 'isSuperAdmin') {
+                        return req.user.isSuperAdmin === true;
+                    } else {
+                        // For supplier routes, allow admins and superadmins to access
+                        return req.user[r] === true || req.user.isAdmin === true || req.user.isSuperAdmin === true;
+                    }
+                });
             } else {
-                hasPermission = req.user[role] === true;
+                // Handle single role
+                if (role === 'isAdmin') {
+                    hasPermission = req.user.isAdmin === true || req.user.isSuperAdmin === true;
+                } else if (role === 'isSuperAdmin') {
+                    hasPermission = req.user.isSuperAdmin === true;
+                } else {
+                    // For supplier routes, allow admins and superadmins to access
+                    hasPermission = req.user[role] === true || req.user.isAdmin === true || req.user.isSuperAdmin === true;
+                }
             }
 
             if (hasPermission) {

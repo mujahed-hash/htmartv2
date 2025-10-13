@@ -8,17 +8,19 @@ const Category = require('../database/models/category');
 const Product = require('../database/models/product');
 const Cart = require('../database/models/cart');
 
-// Create a new post
-router.post('/product', middleware.verifyToken, roleMiddleware('isSupplier'), upload.array('images'), productController.productPost);
+// Create a new post (suppliers and admins can post)
+router.post('/product', middleware.verifyToken, roleMiddleware(['isSupplier', 'isAdmin']), upload.array('images'), productController.productPost);
 // by user
 router.delete('/product/delete', middleware.verifyToken, productController.deletProduct);
 router.get('/products',middleware.verifyToken,productController.getProducts );
+// Advanced product filtering with location support
+router.get('/products/filter',middleware.verifyToken,productController.getProductsWithFilters);
 router.get('/supplier/items', middleware.verifyToken, roleMiddleware('isSupplier'), productController.getProductsByUser);
 router.get('/supplier/productscount',middleware.verifyToken, roleMiddleware('isSupplier'), productController.getProductsCountforSupplier );
 router.get('/admin/productscount',middleware.verifyToken, roleMiddleware('isAdmin'), productController.getProductsCountforAmin );
 
 router.get('/product/:customIdentifier', productController.getProductByCustomIdentifier);
-router.put('/product/:customIdentifer', middleware.verifyToken, roleMiddleware('isSupplier'), upload.array('images'), productController.updateProduct);
+router.put('/product/:customIdentifer', middleware.verifyToken, roleMiddleware(['isSupplier', 'isAdmin']), upload.array('images'), productController.updateProduct);
 
 router.get('/admin/allitems', middleware.verifyToken, roleMiddleware('isAdmin'), productController.getAllProducts);
 

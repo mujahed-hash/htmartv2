@@ -1,6 +1,6 @@
 const ServiceCategory = require('../database/models/serviceCategory');
 const slugify = require('slugify');
-const { Service } = require('../database/models/service');
+const Service = require('../database/models/service');
 const path = require('path');
 const fs = require('fs');
 
