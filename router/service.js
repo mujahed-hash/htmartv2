@@ -20,8 +20,8 @@ router.get('/services/active', serviceController.getActiveServices);
 // Get all unique regions from active services
 router.get('/services/regions', serviceController.getAllRegions);
 
-// Get all services (can be filtered, paginated)
-router.get('/services', serviceController.getAllServices);
+// Get all services (can be filtered, paginated) - requires authentication for My Services and Admin Services views
+router.get('/services', middleware.verifyToken, serviceController.getAllServices);
 
 // Get a single service by custom identifier
 router.get('/services/:customIdentifier', serviceController.getServiceByCustomIdentifier);

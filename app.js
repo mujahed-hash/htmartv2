@@ -103,6 +103,7 @@ app.use('/uploads/categories', express.static(path.join(__dirname, '/uploads/cat
 app.use('/uploads/requirements', express.static(path.join(__dirname, '/uploads/requirements/')));
 app.use('/uploads/services', express.static(path.join(__dirname, '/uploads/services'))); // Add static path for services
 app.use('/uploads/service-categories', express.static(path.join(__dirname, '/uploads/service-categories'))); // Add static path for service categories
+app.use('/uploads/users', express.static(path.join(__dirname, '/uploads/users'))); // Add static path for users
 
 // API routes
 app.use('/api', userRoute);
@@ -113,7 +114,7 @@ app.use('/api', orderRoute);
 app.use('/api/request', reqRoute);
 app.use('/api', SearchProd);
 app.use('/api', adminSearch);
-app.use('/api', Makerequest);
+app.use('/api/request', Makerequest);
 app.use('/api', NotificationRoute);
 app.use('/api/superadmin', superadminRoute);
 app.use('/api', require('./router/service')); // Add the service route

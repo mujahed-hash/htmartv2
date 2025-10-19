@@ -78,8 +78,47 @@ exports.createService = async (req, res) => {
 
 exports.getAllServices = async (req, res) => {
     try {
-        const { categoryCustomIdentifier, userId, isApproved, isActive, search, start = 0, limit = 10 } = req.query;
+        const { categoryCustomIdentifier, isApproved, isActive, search, start = 0, limit = 10, isMyServicesView, isAdminView } = req.query;
         let filter = {};
+
+        // Security: Ensure userId comes from authenticated token for "My Services"
+        const authenticatedUserId = req.userId; // This comes from middleware.verifyToken
+
+        console.log('=== GET ALL SERVICES DEBUG ===');
+        console.log('Query params:', { categoryCustomIdentifier, isApproved, isActive, search, start, limit, isMyServicesView, isAdminView });
+        console.log('Authenticated user ID:', authenticatedUserId);
+        console.log('User role:', req.user ? { isAdmin: req.user.isAdmin, isSuperAdmin: req.user.isSuperAdmin } : 'No user');
+
+        // Determine if the authenticated user is an Admin or SuperAdmin
+        const isAdminOrSuperAdmin = req.user && (req.user.isAdmin === true || req.user.isSuperAdmin === true);
+
+        // Scenario 1: "My Services" view - show only services posted by the current authenticated user
+        // This applies to ALL roles (supplier, buyer, user) - they see only their own services
+        if (isMyServicesView === 'true' && authenticatedUserId) {
+            // Convert string userId to ObjectId for MongoDB query using 'new' keyword
+            filter.user = new mongoose.Types.ObjectId(authenticatedUserId);
+            console.log('✅ My Services filter applied for user:', authenticatedUserId);
+            console.log('User role (doesn\'t matter for My Services):', req.user ? { isAdmin: req.user.isAdmin, isSuperAdmin: req.user.isSuperAdmin, isSupplier: req.user.isSupplier } : 'No user');
+            // For 'My Services', show all their services regardless of approval status
+            // Users can manage their own services (pending, active, inactive)
+        }
+        // Scenario 2: "Admin Services" view - show ALL services (only for admin/superadmin)
+        else if (isAdminView === 'true') {
+            if (!isAdminOrSuperAdmin) {
+                console.log('❌ Unauthorized: Non-admin trying to access Admin Services');
+                return res.status(403).json({ success: false, message: 'Unauthorized. Admin access required.' });
+            }
+            console.log('✅ Admin Services view - showing all services (no user filter)');
+            // No user-specific filter, show all services by default for admins
+            // Admins/Superadmins can see all services (approved, pending, active, inactive)
+            // Only apply status filters if explicitly requested via query parameters
+        }
+        // Scenario 3: Public "All Services" view - show only active and approved services
+        else {
+            console.log('📋 Public services view - showing only active and approved services');
+            filter.isActive = true;
+            filter.isApproved = true;
+        }
 
         if (categoryCustomIdentifier) {
             const category = await ServiceCategory.findOne({ customIdentifier: categoryCustomIdentifier });
@@ -90,15 +129,12 @@ exports.getAllServices = async (req, res) => {
             }
         }
 
-        if (userId) {
-            filter.user = userId;
-        }
-
-        if (isApproved !== undefined) {
+        // Apply filters based on query parameters, AFTER initial view-based filtering
+        if (isApproved !== undefined && isMyServicesView !== 'true') { // Don't apply isApproved/isActive filters if it's 'My Services' view
             filter.isApproved = isApproved === 'true';
         }
 
-        if (isActive !== undefined) {
+        if (isActive !== undefined && isMyServicesView !== 'true') { // Don't apply isApproved/isActive filters if it's 'My Services' view
             filter.isActive = isActive === 'true';
         }
 
@@ -110,20 +146,41 @@ exports.getAllServices = async (req, res) => {
             ];
         }
 
+        console.log('Final filter applied:', JSON.stringify(filter, null, 2));
+
         const services = await Service.find(filter)
             .select('serviceName serviceDesc price images user category contactInfo availableRegions isActive isApproved customIdentifier date')
-            .populate('user', 'name') // Only populate 'name' as per user's request
+            .populate('user', 'name _id') // Populate name and _id for ownership checks
             .populate('category', 'name customIdentifier') // Populate category details
             .sort({ date: -1 })
             .skip(parseInt(start))
             .limit(parseInt(limit));
 
+        console.log(`Found ${services.length} services for user ${authenticatedUserId}`);
 
         const totalServices = await Service.countDocuments(filter);
 
+        // Transform services to include full image URLs
+        const transformedServices = services.map(service => {
+            const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+            const basePath = `${protocol}://${req.get('host')}/uploads/services`;
+
+            if (service.images && service.images.length > 0) {
+                service.images = service.images.map(image => {
+                    if (image.startsWith('http')) {
+                        return image; // Already a full URL
+                    }
+                    return `${basePath}/${image}`;
+                });
+            }
+
+            return service;
+        });
+
         res.status(200).json({
+            success: true,
             totalServices,
-            services
+            services: transformedServices
         });
     } catch (error) {
         console.error('Error fetching services:', error);
@@ -136,7 +193,7 @@ exports.getActiveServices = async (req, res) => {
     console.log('Received request for getActiveServices');
     console.log('Request Headers:', req.headers);
     console.log('Request Query:', req.query);
-    
+
     // Check if token exists and is valid, but don't require it
     let userId = null;
     const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -151,11 +208,11 @@ exports.getActiveServices = async (req, res) => {
     } else {
         console.log('No token provided, continuing as unauthenticated user');
     }
-    
+
     try {
         const { categoryCustomIdentifier, search, region, start = 0, limit = 10 } = req.query;
         console.log(`getActiveServices: Received start=${start}, limit=${limit}, region=${region}`); // Added log
-        
+
         // Base filter - only services that are BOTH active AND approved (for public marketplace)
         let filter = {
             isActive: true,
@@ -180,11 +237,11 @@ exports.getActiveServices = async (req, res) => {
         // Optional category filter
         if (categoryCustomIdentifier) {
             console.log('Filtering by category:', categoryCustomIdentifier);
-            
+
             // Handle multiple categories (comma-separated)
             const categoryIdentifiers = categoryCustomIdentifier.split(',').map(id => id.trim()).filter(id => id);
             console.log('Parsed category identifiers:', categoryIdentifiers);
-            
+
             if (categoryIdentifiers.length === 1) {
                 // Single category
                 const category = await ServiceCategory.findOne({ customIdentifier: categoryIdentifiers[0] });
@@ -195,14 +252,14 @@ exports.getActiveServices = async (req, res) => {
                 }
             } else {
                 // Multiple categories - find all category IDs
-                const categories = await ServiceCategory.find({ 
-                    customIdentifier: { $in: categoryIdentifiers } 
+                const categories = await ServiceCategory.find({
+                    customIdentifier: { $in: categoryIdentifiers }
                 });
-                
+
                 if (categories.length === 0) {
                     return res.status(404).json({ message: 'No categories found.' });
                 }
-                
+
                 const categoryIds = categories.map(cat => cat._id);
                 filter.category = { $in: categoryIds };
                 console.log('Multiple categories filter:', filter.category);
@@ -212,17 +269,17 @@ exports.getActiveServices = async (req, res) => {
         // Optional region filter
         if (region) {
             console.log('Filtering by region:', region);
-            
+
             // Handle multiple regions (comma-separated)
             const regions = region.split(',').map(r => r.trim()).filter(r => r);
             console.log('Parsed regions:', regions);
-            
+
             if (regions.length === 1) {
                 // Single region - use regex for partial matching
-                filter.availableRegions = { 
-                    $elemMatch: { 
-                        $regex: regions[0], 
-                        $options: 'i' 
+                filter.availableRegions = {
+                    $elemMatch: {
+                        $regex: regions[0],
+                        $options: 'i'
                     }
                 };
             } else {
@@ -230,16 +287,16 @@ exports.getActiveServices = async (req, res) => {
                 filter.$or = filter.$or || [];
                 regions.forEach(regionName => {
                     filter.$or.push({
-                        availableRegions: { 
-                            $elemMatch: { 
-                                $regex: regionName, 
-                                $options: 'i' 
+                        availableRegions: {
+                            $elemMatch: {
+                                $regex: regionName,
+                                $options: 'i'
                             }
                         }
                     });
                 });
             }
-            
+
             console.log('Region filter applied:', filter.availableRegions);
             console.log('Full filter with $or:', filter);
         }
@@ -251,7 +308,7 @@ exports.getActiveServices = async (req, res) => {
                 { serviceDesc: { $regex: search, $options: 'i' } },
                 { availableRegions: { $regex: search, $options: 'i' } }
             ];
-            
+
             if (filter.$or) {
                 // If we already have $or from region filtering, combine them
                 filter.$and = [
@@ -277,18 +334,35 @@ exports.getActiveServices = async (req, res) => {
 
         const totalServices = await Service.countDocuments(filter);
 
+        // Transform services to include full image URLs
+        const transformedServices = services.map(service => {
+            const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+            const basePath = `${protocol}://${req.get('host')}/uploads/services`;
+
+            if (service.images && service.images.length > 0) {
+                service.images = service.images.map(image => {
+                    if (image.startsWith('http')) {
+                        return image; // Already a full URL
+                    }
+                    return `${basePath}/${image}`;
+                });
+            }
+
+            return service;
+        });
+
         res.status(200).json({
             success: true,
             totalServices,
-            services,
+            services: transformedServices,
             message: `Found ${services.length} active services`
         });
     } catch (error) {
         console.error('Error fetching active services:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             error: 'Server error while fetching active services.',
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -297,7 +371,7 @@ exports.getActiveServices = async (req, res) => {
 exports.getAllRegions = async (req, res) => {
     try {
         console.log('Getting all unique regions...');
-        
+
         // Get all unique regions from active and approved services
         const regions = await Service.aggregate([
             {
@@ -330,16 +404,16 @@ exports.getAllRegions = async (req, res) => {
                 if (region && region.trim()) {
                     const normalizedRegion = region.trim();
                     const lowerCaseRegion = normalizedRegion.toLowerCase();
-                    
+
                     // Keep the version with proper capitalization
-                    if (!regionMap.has(lowerCaseRegion) || 
-                        (normalizedRegion[0] === normalizedRegion[0].toUpperCase() && 
+                    if (!regionMap.has(lowerCaseRegion) ||
+                        (normalizedRegion[0] === normalizedRegion[0].toUpperCase() &&
                          regionMap.get(lowerCaseRegion)[0] !== regionMap.get(lowerCaseRegion)[0].toUpperCase())) {
                         regionMap.set(lowerCaseRegion, normalizedRegion);
                     }
                 }
             });
-            
+
             uniqueRegions = Array.from(regionMap.values()).sort();
         }
 
@@ -351,10 +425,10 @@ exports.getAllRegions = async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching regions:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             error: 'Server error while fetching regions.',
-            details: error.message 
+            details: error.message
         });
     }
 };
@@ -374,7 +448,7 @@ exports.getServiceByCustomIdentifier = async (req, res) => {
     } else {
         console.log('No token provided, continuing as unauthenticated user');
     }
-    
+
     try {
         const { customIdentifier } = req.params;
         console.log('Getting service by customIdentifier:', customIdentifier);
@@ -397,6 +471,19 @@ exports.getServiceByCustomIdentifier = async (req, res) => {
 
         if (!service) {
             return res.status(404).json({ message: 'Service not found.' });
+        }
+
+        // Transform service to include full image URLs
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const basePath = `${protocol}://${req.get('host')}/uploads/services`;
+
+        if (service.images && service.images.length > 0) {
+            service.images = service.images.map(image => {
+                if (image.startsWith('http')) {
+                    return image; // Already a full URL
+                }
+                return `${basePath}/${image}`;
+            });
         }
 
         res.status(200).json(service);
@@ -426,7 +513,7 @@ exports.updateService = async (req, res) => {
         // Get roles directly from the JWT token via req.user
         const isOwner = service.user && service.user._id ? service.user._id.toString() === userId.toString() : false;
         const isAdmin = req.user && (req.user.isAdmin === true || req.user.isSuperAdmin === true);
-        
+
         console.log('Update Authorization Check:', {
             userId,
             serviceUserId: service.user ? service.user._id : null,
@@ -470,7 +557,7 @@ exports.updateService = async (req, res) => {
         if (files && files.length > 0) {
             const protocol = req.headers['x-forwarded-proto'] || req.protocol;
             const basePath = `${protocol}://${req.get('host')}/uploads/services`;
-            
+
             // Remove old images if they exist before adding new ones
             if (service.images && service.images.length > 0) {
                 service.images.forEach(imageUrl => {
@@ -504,7 +591,7 @@ exports.deleteService = async (req, res) => {
             return res.status(401).json({ error: 'User not authenticated.' });
         }
 
-        const service = await Service.findOne({ customIdentifier }).populate('user');
+        const service = await Service.findOne({ customIdentifier }).populate('user', 'name _id');
 
         if (!service) {
             return res.status(404).json({ message: 'Service not found.' });
@@ -513,7 +600,7 @@ exports.deleteService = async (req, res) => {
         // Get roles directly from the JWT token via req.user
         const isOwner = service.user && service.user._id ? service.user._id.toString() === userId.toString() : false;
         const isAdmin = req.user && (req.user.isAdmin === true || req.user.isSuperAdmin === true);
-        
+
         console.log('Delete Authorization Check:', {
             userId,
             serviceUserId: service.user ? service.user._id : null,
@@ -557,13 +644,13 @@ exports.deleteService = async (req, res) => {
 exports.approveService = async (req, res) => {
     try {
         const { customIdentifier } = req.params;
-        
+
         // Verify admin permissions from JWT
         const isAdmin = req.user && (req.user.isAdmin === true || req.user.isSuperAdmin === true);
         if (!isAdmin) {
             return res.status(403).json({ error: 'You are not authorized to approve services.' });
         }
-        
+
         console.log('Approval Authorization:', {
             userId: req.userId,
             tokenRoles: req.user ? { isAdmin: req.user.isAdmin, isSuperAdmin: req.user.isSuperAdmin } : null
@@ -588,13 +675,13 @@ exports.approveService = async (req, res) => {
 exports.toggleServiceStatus = async (req, res) => {
     try {
         const { customIdentifier } = req.params;
-        
+
         // Verify admin permissions from JWT
         const isAdmin = req.user && (req.user.isAdmin === true || req.user.isSuperAdmin === true);
         if (!isAdmin) {
             return res.status(403).json({ error: 'You are not authorized to change service status.' });
         }
-        
+
         console.log('Toggle Status Authorization:', {
             userId: req.userId,
             tokenRoles: req.user ? { isAdmin: req.user.isAdmin, isSuperAdmin: req.user.isSuperAdmin } : null

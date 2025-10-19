@@ -81,4 +81,12 @@ userSchema.methods.getJwt = function() {
 }
 userSchema.index({ name: 'text', email: 1, customIdentifer: 1, isAdmin: 1 });
 
+// Virtual field to expose customIdentifer as customIdentifier for frontend compatibility
+userSchema.virtual('customIdentifier').get(function() {
+  return this.customIdentifer;
+});
+
+// Ensure virtual fields are serialized
+userSchema.set('toJSON', { virtuals: true });
+
 module.exports = mongoose.model('User', userSchema);

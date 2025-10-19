@@ -11,6 +11,11 @@ categorySchema.virtual('id').get(function(){
     return this._id.toHexString();
 });
 
+// Virtual field to expose customIdentifer as customIdentifier for frontend compatibility
+categorySchema.virtual('customIdentifier').get(function() {
+  return this.customIdentifer;
+});
+
 categorySchema.set('toJSON',{
     virtuals: true,
 });

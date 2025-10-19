@@ -1,5 +1,5 @@
 const ServiceOrder = require('../database/models/serviceOrder');
-const { Service } = require('../database/models/service');
+const Service = require('../database/models/service');
 const User = require('../database/models/user');
 const Notification = require('../database/models/notification'); // Import Notification model
 const slugify = require('slugify');
@@ -14,13 +14,12 @@ exports.createServiceOrder = async (req, res) => {
         const userId = req.userId;
         console.log('User ID from token:', userId);
         
-        const { 
-            serviceId, 
-            name, 
-            email, 
-            phone, 
-            address, 
-            quantity, 
+        const {
+            serviceId,
+            name,
+            email,
+            phone,
+            address,
             notes,
             supplierId
         } = req.body;
@@ -167,8 +166,8 @@ exports.createServiceOrder = async (req, res) => {
             return res.status(404).json({ error: 'Supplier not found. Please contact support.' });
         }
 
-        // Calculate total price
-        const totalPrice = service.price * quantity;
+        // Calculate total price (services don't use quantity)
+        const totalPrice = service.price;
 
         // Generate a custom identifier
         const timestamp = Date.now();
@@ -187,7 +186,6 @@ exports.createServiceOrder = async (req, res) => {
                 phone,
                 address
             },
-            quantity,
             notes,
             price: service.price,
             totalPrice,
@@ -335,23 +333,118 @@ exports.getUserServiceOrders = async (req, res) => {
 // Get service orders for a supplier
 exports.getSupplierServiceOrders = async (req, res) => {
     try {
+        console.log('=== getSupplierServiceOrders called ===');
+        console.log('Supplier ID:', req.userId);
+        console.log('Query params:', req.query);
+        
         const userId = req.userId;
 
         if (!userId) {
+            console.log('No user ID found');
             return res.status(401).json({ error: 'User not authenticated.' });
         }
 
+        // Get pagination parameters from query
+        const start = parseInt(req.query.start) || 0;
+        const limit = parseInt(req.query.limit) || 20;
+        
+        console.log('Pagination params - start:', start, 'limit:', limit);
+
+        // Get total count for pagination
+        const totalCount = await ServiceOrder.countDocuments({ supplier: userId });
+        console.log('Total count:', totalCount);
+
+        // Get orders with pagination
         const orders = await ServiceOrder.find({ supplier: userId })
             .populate('service', 'serviceName images price customIdentifier')
-            .populate('user', 'name')
-            .sort({ date: -1 });
+            .populate('user', 'name email')
+            .select('customIdentifier status service user supplier price totalPrice date notes') // Explicitly select customIdentifier
+            .sort({ date: -1 })
+            .skip(start)
+            .limit(limit);
 
-        res.status(200).json({
+        console.log('Found orders:', orders.length);
+
+        const response = {
             success: true,
-            orders
-        });
+            orders,
+            totalOrders: totalCount,
+            pagination: {
+                start,
+                limit,
+                currentPage: Math.floor(start / limit) + 1,
+                totalPages: Math.ceil(totalCount / limit)
+            }
+        };
+        
+        console.log('Sending response with', orders.length, 'orders out of', totalCount, 'total');
+        res.status(200).json(response);
     } catch (error) {
         console.error('Error fetching supplier service orders:', error);
+        res.status(500).json({ error: 'Server error while fetching service orders.', details: error.message });
+    }
+};
+
+// Get all service orders for admin
+exports.getAllServiceOrders = async (req, res) => {
+    try {
+        console.log('=== getAllServiceOrders (Admin) called ===');
+        console.log('Admin ID:', req.userId);
+        console.log('Query params:', req.query);
+        
+        const userId = req.userId;
+
+        if (!userId) {
+            console.log('No user ID found');
+            return res.status(401).json({ error: 'User not authenticated.' });
+        }
+
+        // Check if user is admin or superadmin
+        const isAdmin = req.user && (req.user.isAdmin === true || req.user.isSuperAdmin === true);
+
+        if (!isAdmin) {
+            console.log('User is not admin');
+            return res.status(403).json({ error: 'Unauthorized. Admin access required.' });
+        }
+
+        // Get pagination parameters from query
+        const start = parseInt(req.query.start) || 0;
+        const limit = parseInt(req.query.limit) || 20;
+        
+        console.log('Pagination params - start:', start, 'limit:', limit);
+
+        // Get total count for pagination
+        const totalCount = await ServiceOrder.countDocuments({});
+        console.log('Total count:', totalCount);
+
+        // Get all orders with pagination
+        const orders = await ServiceOrder.find({})
+            .populate('service', 'serviceName images price customIdentifier')
+            .populate('user', 'name email')
+            .populate('supplier', 'name email')
+            .select('customIdentifier status service user supplier price totalPrice date notes') // Explicitly select customIdentifier
+            .sort({ date: -1 })
+            .skip(start)
+            .limit(limit);
+
+        console.log('Found orders:', orders.length);
+
+        const response = {
+            success: true,
+            orders,
+            totalOrders: totalCount,
+            pagination: {
+                start,
+                limit,
+                currentPage: Math.floor(start / limit) + 1,
+                totalPages: Math.ceil(totalCount / limit)
+            }
+        };
+        
+        console.log('Sending response with', orders.length, 'orders out of', totalCount, 'total');
+        res.status(200).json(response);
+    } catch (error) {
+        console.error('Error fetching all service orders:', error);
         res.status(500).json({ error: 'Server error while fetching service orders.', details: error.message });
     }
 };

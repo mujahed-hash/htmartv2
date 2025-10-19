@@ -87,6 +87,7 @@ const getSupplierOrders = async (supplierId) => {
   
       // Find orders that contain the supplier's products
       const orders = await Order.find({ 'orderItems.product': { $in: productIds } }).sort({date:-1})
+        .select('customIdentifer status orderItems user totalPrice date notes') // Explicitly select customIdentifer
         .populate({
           path: 'orderItems.product',
           select: 'prodName prodDesc prodPrice customIdentifer',
@@ -245,6 +246,7 @@ const getSupplierOrdersByStatus = async (req, supplierId, status) => {
       'orderItems.product': { $in: productIds },
       status,
     })
+      .select('customIdentifer status orderItems user totalPrice date notes') // Explicitly select customIdentifer
       .sort({ date: -1 })  // Sort by most recent date
       .skip(start)         // Pagination start
       .limit(limit)        // Pagination limit

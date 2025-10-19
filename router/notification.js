@@ -89,7 +89,7 @@ router.post('/notifications', asyncHandler(notificationsController.triggerNotifi
 router.put('/admin/mark-all-read',middleware.verifyToken ,roleMiddleware('isAdmin'), notificationsController.markAllAsAdminRead);
 
 // Get unread notification count for admin
-router.get('/admin/count/unread-count', roleMiddleware('isAdmin'), notificationsController.getAdminUnreadNotificationCount);
+router.get('/admin/count/unread-count', middleware.verifyToken, roleMiddleware('isAdmin'), notificationsController.getAdminUnreadNotificationCount);
 
 
 module.exports = router;

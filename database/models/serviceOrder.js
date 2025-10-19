@@ -55,11 +55,6 @@ const serviceOrderSchema = new mongoose.Schema({
             required: true
         }
     },
-    quantity: {
-        type: Number,
-        required: true,
-        min: 1
-    },
     notes: {
         type: String,
         default: ''

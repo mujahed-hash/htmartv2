@@ -43,6 +43,14 @@ const orderSchema = new mongoose.Schema({
 }, { timestamps: true });
 orderSchema.index({ user: 1, customIdentifer: 1, status: 1 });
 
+// Virtual field to expose customIdentifer as customIdentifier for frontend compatibility
+orderSchema.virtual('customIdentifier').get(function() {
+  return this.customIdentifer;
+});
+
+// Ensure virtual fields are serialized
+orderSchema.set('toJSON', { virtuals: true });
+
 // Index for sorting or querying by date
 // orderSchema.index({ date: -1 });
 

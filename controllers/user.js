@@ -16,6 +16,15 @@ module.exports.userProfile = async (req, res, next) => {
                 message: "User record not found."
             });
         } else {
+            // Transform user image to include full URL
+            const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+            const basePath = `${protocol}://${req.get('host')}/uploads/users`;
+            let userImage = user.image;
+
+            if (userImage && !userImage.startsWith('http')) {
+                userImage = `${basePath}/${userImage}`;
+            }
+
             return res.status(200).json({
                 status: true,
                 user: {
@@ -32,7 +41,7 @@ module.exports.userProfile = async (req, res, next) => {
                     posts: user.posts,
                     firstname: user.firstname,
                     lastname: user.lastname,
-                    image: user.image
+                    image: userImage
                 }
             });
         }
@@ -46,8 +55,21 @@ module.exports.userProfile = async (req, res, next) => {
 
 exports.getUsers = async (req,res)=>{
     const users = await User.find().sort({date:-1}).select('-passwordHash');
-    if(!users) return res.status(404).json('No Users found');
-    res.status(200).json(users);
+
+    // Transform users to include full image URLs
+    const transformedUsers = users.map(user => {
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const basePath = `${protocol}://${req.get('host')}/uploads/users`;
+
+        if (user.image && !user.image.startsWith('http')) {
+            user.image = `${basePath}/${user.image}`;
+        }
+
+        return user;
+    });
+
+    if(!transformedUsers) return res.status(404).json('No Users found');
+    res.status(200).json(transformedUsers);
 }
 
 // module.exports.userProfile = async (req, res, next) => {

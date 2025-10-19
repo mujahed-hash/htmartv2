@@ -284,11 +284,8 @@ exports.getProductsByUser = async (req, res) => {
         // Query products by user ID
         const products = await Product.find({ user: userId }).sort({date:-1}).select('prodName images prodPrice customIdentifer')     .skip(start)
         .limit(limit);;
-        if (!products.length) {
-            return res.status(404).send('No products found for this user.');
-        }
 
-        // res.status(200).json(products);
+        // Always return the expected format, even if no products found
         res.status(200).json({
             totalProducts,
             products
@@ -413,8 +410,8 @@ exports.getProductsWithFilters = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const userId = req.userId;
 
-        // Build base filter object
-        const baseFilter = {
+        // Build filter object
+        const filter = {
             countInStock: { $gt: 0 },
             isActive: true
         };
@@ -422,79 +419,58 @@ exports.getProductsWithFilters = async (req, res) => {
         // Location filtering (cities - can be multiple)
         if (req.query.cities && req.query.cities.trim() !== '') {
             const cities = req.query.cities.split(',').map(city => city.trim());
-            baseFilter['locations.cityCode'] = { $in: cities };
+            filter['locations.cityCode'] = { $in: cities };
         }
 
         // State filtering (can be multiple)
         if (req.query.states && req.query.states.trim() !== '') {
             const states = req.query.states.split(',').map(state => state.trim());
-            baseFilter['locations.stateCode'] = { $in: states };
+            filter['locations.stateCode'] = { $in: states };
         }
 
         // Category filtering (can be multiple category IDs)
         if (req.query.categories && req.query.categories.trim() !== '') {
             const categories = req.query.categories.split(',').map(cat => cat.trim());
-            baseFilter.category = { $in: categories };
+            filter.category = { $in: categories };
         }
 
         // Price range filtering
         if (req.query.minPrice || req.query.maxPrice) {
-            baseFilter.prodPrice = {};
+            filter.prodPrice = {};
             if (req.query.minPrice) {
-                baseFilter.prodPrice.$gte = parseFloat(req.query.minPrice);
+                filter.prodPrice.$gte = parseFloat(req.query.minPrice);
             }
             if (req.query.maxPrice) {
-                baseFilter.prodPrice.$lte = parseFloat(req.query.maxPrice);
+                filter.prodPrice.$lte = parseFloat(req.query.maxPrice);
             }
         }
 
         // Condition filtering (new, like-new, good, fair, refurbished)
         if (req.query.condition && req.query.condition.trim() !== '') {
             const conditions = req.query.condition.split(',').map(c => c.trim());
-            baseFilter.condition = { $in: conditions };
+            filter.condition = { $in: conditions };
         }
 
         // Brand filtering (can be multiple)
         if (req.query.brand && req.query.brand.trim() !== '') {
             const brands = req.query.brand.split(',').map(b => b.trim());
-            baseFilter.brand = { $in: brands };
+            filter.brand = { $in: brands };
         }
 
         // Business Type filtering
         if (req.query.businessType && req.query.businessType.trim() !== '') {
             const businessTypes = req.query.businessType.split(',').map(bt => bt.trim());
-            baseFilter.businessType = { $in: businessTypes };
+            filter.businessType = { $in: businessTypes };
         }
 
         // Delivery filtering
         if (req.query.freeDelivery === 'true') {
-            baseFilter.freeDeliveryAbove = { $exists: true, $ne: null };
+            filter.freeDeliveryAbove = { $exists: true, $ne: null };
         }
 
-        // Build final filter with search
-        let filter;
+        // Text search (product name, description, tags)
         if (req.query.search && req.query.search.trim() !== '') {
-            const searchTerm = req.query.search.trim();
-            console.log('Search term received:', searchTerm);
-            
-            // Combine base filters with search using $and
-            filter = {
-                $and: [
-                    baseFilter,
-                    {
-                        $or: [
-                            { prodName: { $regex: searchTerm, $options: 'i' } },
-                            { prodDesc: { $regex: searchTerm, $options: 'i' } },
-                            { brand: { $regex: searchTerm, $options: 'i' } },
-                            { tags: { $in: [new RegExp(searchTerm, 'i')] } }
-                        ]
-                    }
-                ]
-            };
-            console.log('Search filter applied with $and structure');
-        } else {
-            // No search, use base filter only
-            filter = baseFilter;
+            filter.$text = { $search: req.query.search };
         }
 
         // Sorting
@@ -519,7 +495,7 @@ exports.getProductsWithFilters = async (req, res) => {
                 sortOption = { date: sortOrder };
         }
 
-        console.log('Final filter object:', JSON.stringify(filter, null, 2));
+        console.log('Filter object:', JSON.stringify(filter, null, 2));
         console.log('Sort option:', sortOption);
 
         // Fetch products with filters
@@ -549,11 +525,6 @@ exports.getProductsWithFilters = async (req, res) => {
         // Total count for pagination
         const totalProducts = await Product.countDocuments(filter);
 
-        console.log(`Search results: Found ${productsWithCartStatus.length} products out of ${totalProducts} total`);
-        if (req.query.search) {
-            console.log(`Search query "${req.query.search}" returned ${totalProducts} results`);
-        }
-
         res.status(200).json({
             success: true,
             totalProducts,
@@ -570,8 +541,7 @@ exports.getProductsWithFilters = async (req, res) => {
                 },
                 condition: req.query.condition || 'all',
                 brand: req.query.brand || 'all',
-                businessType: req.query.businessType || 'all',
-                search: req.query.search || 'none'
+                businessType: req.query.businessType || 'all'
             },
             products: productsWithCartStatus
         });

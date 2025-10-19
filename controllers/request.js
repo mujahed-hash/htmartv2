@@ -3,6 +3,7 @@
 const Request = require('../database/models/request'); 
 const User = require('../database/models/user');
 const Notification = require('../database/models/notification');
+const ProductSubmission = require('../database/models/productsubmission'); // Import ProductSubmission model
 
 
 // Function to get all requests along with user details
@@ -50,5 +51,29 @@ exports.createRequest = async (req, res) => {
         res.status(201).json({ message: 'Request created successfully', request });
     } catch (error) {
         res.status(500).json({ message: 'Error creating request', error });
+    }
+};
+
+// Function to get completed/delivered products for a supplier
+exports.getSupplierDeliveries = async (req, res) => {
+    try {
+        const supplierId = req.userId; // Assuming req.userId is set by middleware
+        if (!supplierId) {
+            return res.status(400).json({ message: 'Supplier ID not found in request.' });
+        }
+
+        const deliveries = await ProductSubmission.find({
+            supplier: supplierId,
+            status: 'Delivered' // Only fetching delivered products for "deliveries"
+        })
+        .populate('requirement') // Populate related requirement details if needed
+        .populate('supplier', 'name customIdentifier') // Populate supplier details
+        .sort({ date: -1 });
+
+        console.log('Fetched supplier deliveries:', deliveries); // Add this line
+        res.status(200).json(deliveries);
+    } catch (error) {
+        console.error('Error fetching supplier deliveries:', error);
+        res.status(500).json({ message: 'Error fetching supplier deliveries', error: error.message });
     }
 };

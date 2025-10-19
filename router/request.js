@@ -4,8 +4,11 @@ const Request = require('../controllers/request');
 const roleMiddleware = require('../helper/roles')
 const middleware = require('../helper/middleware');
 
+
 router.post('/make-request', middleware.verifyToken, Request.createRequest);
 
 router.get('/see-requests', middleware.verifyToken,roleMiddleware('isAdmin'), Request.getAllRequests);
+
+router.get('/supplier-deliveries', middleware.verifyToken, Request.getSupplierDeliveries);
 
 module.exports = router;

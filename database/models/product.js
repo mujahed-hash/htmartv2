@@ -138,4 +138,12 @@ productSchema.index({ date: -1 });
 productSchema.index({ averageRating: -1 });
 productSchema.index({ businessType: 1 });
 
+// Virtual field to expose customIdentifer as customIdentifier for frontend compatibility
+productSchema.virtual('customIdentifier').get(function() {
+  return this.customIdentifer;
+});
+
+// Ensure virtual fields are serialized
+productSchema.set('toJSON', { virtuals: true });
+
 module.exports = mongoose.model('Product', productSchema);

@@ -25,6 +25,13 @@ router.get(
     serviceOrderController.getSupplierServiceOrders
 );
 
+// Get all service orders for admin (requires authentication and admin role)
+router.get(
+    '/service-orders/admin/all',
+    middleware.verifyToken,
+    serviceOrderController.getAllServiceOrders
+);
+
 // Get a single service order by customIdentifier (requires authentication)
 router.get(
     '/service-orders/:customIdentifier',
