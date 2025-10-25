@@ -69,8 +69,12 @@ exports.productPost = async (req, res) => {
         console.log('📍 Parsed locations:', parsedLocations);
         console.log('🏷️ Parsed tags:', parsedTags);
 
-        // Validate locations
-        if (!parsedLocations || parsedLocations.length === 0) {
+        // Validate locations: Allow empty array for "All India"
+        if (parsedLocations && parsedLocations.length === 0) {
+            console.log('✅ Locations array is empty, assuming All India. Skipping specific location validation.');
+            // No specific action needed here; an empty array will be stored.
+        } else if (!parsedLocations || parsedLocations.length === 0) {
+            console.error('❌ Location validation failed: parsedLocations is missing or empty for specific location scenario.');
             return res.status(400).json({ error: 'At least one location is required' });
         }
 
@@ -406,6 +410,9 @@ exports.getProducts = async (req, res) => {
  */
 exports.getProductsWithFilters = async (req, res) => {
     try {
+        console.log('🎯 getProductsWithFilters called!');
+        console.log('🔍 Full req.query:', JSON.stringify(req.query, null, 2));
+        
         const start = parseInt(req.query.start) || 0;
         const limit = parseInt(req.query.limit) || 10;
         const userId = req.userId;
@@ -417,9 +424,29 @@ exports.getProductsWithFilters = async (req, res) => {
         };
 
         // Location filtering (cities - can be multiple)
-        if (req.query.cities && req.query.cities.trim() !== '') {
-            const cities = req.query.cities.split(',').map(city => city.trim());
-            filter['locations.cityCode'] = { $in: cities };
+        // Check if req.query.cities exists and is an array or a string
+        if (req.query.cities !== undefined) {
+            console.log('🐞 req.query.cities (before processing): ', req.query.cities, 'Type:', typeof req.query.cities);
+
+            if (Array.isArray(req.query.cities) && req.query.cities.length === 0) {
+                // Frontend sent an empty array, meaning "All India"
+                filter.locations = { $size: 0 }; // MongoDB query for empty array
+                console.log('✅ All India filter applied - showing products with no locations ($size: 0)');
+            } else if (typeof req.query.cities === 'string' && req.query.cities.trim() === '') {
+                // Frontend sent an empty string, meaning "All India"
+                filter.locations = { $size: 0 }; // MongoDB query for empty array
+                console.log('✅ All India filter applied (empty string) - showing products with no locations ($size: 0)');
+            } else if (typeof req.query.cities === 'string' && req.query.cities.trim() !== '') {
+                // Specific cities sent as a comma-separated string
+                const cities = req.query.cities.split(',').map(city => city.trim());
+                filter['locations.cityCode'] = { $in: cities };
+                console.log('✅ Specific cities filter applied:', cities);
+            } else if (Array.isArray(req.query.cities) && req.query.cities.length > 0) {
+                // Specific cities sent as an array (less common for query params, but good to handle)
+                const cities = req.query.cities.map(city => city.trim());
+                filter['locations.cityCode'] = { $in: cities };
+                console.log('✅ Specific cities filter applied (array):', cities);
+            }
         }
 
         // State filtering (can be multiple)
@@ -428,10 +455,31 @@ exports.getProductsWithFilters = async (req, res) => {
             filter['locations.stateCode'] = { $in: states };
         }
 
-        // Category filtering (can be multiple category IDs)
+        // Category filtering (can be multiple category IDs or customIdentifiers)
         if (req.query.categories && req.query.categories.trim() !== '') {
             const categories = req.query.categories.split(',').map(cat => cat.trim());
-            filter.category = { $in: categories };
+
+            // Check if categories are ObjectIds or customIdentifiers
+            const objectIdCategories = categories.filter(cat => cat.match(/^[0-9a-fA-F]{24}$/));
+            const customIdCategories = categories.filter(cat => !cat.match(/^[0-9a-fA-F]{24}$/));
+
+            if (objectIdCategories.length > 0 && customIdCategories.length > 0) {
+                // Mixed types - handle both
+                filter.$or = [
+                    { category: { $in: objectIdCategories } },
+                    { category: { $in: await Category.find({ customIdentifer: { $in: customIdCategories } }).distinct('_id') } }
+                ];
+            } else if (objectIdCategories.length > 0) {
+                // Only ObjectIds
+                filter.category = { $in: objectIdCategories };
+            } else if (customIdCategories.length > 0) {
+                // Only customIdentifiers - need to look up ObjectIds
+                const categoryDocs = await Category.find({ customIdentifer: { $in: customIdCategories } }).select('_id');
+                if (categoryDocs.length > 0) {
+                    const categoryIds = categoryDocs.map(doc => doc._id);
+                    filter.category = { $in: categoryIds };
+                }
+            }
         }
 
         // Price range filtering
@@ -498,7 +546,8 @@ exports.getProductsWithFilters = async (req, res) => {
         console.log('Filter object:', JSON.stringify(filter, null, 2));
         console.log('Sort option:', sortOption);
 
-        // Fetch products with filters
+        // Execute query
+        console.log('Final MongoDB filter:', JSON.stringify(filter, null, 2));
         const products = await Product.find(filter)
             .sort(sortOption)
             .populate('category')
@@ -518,6 +567,9 @@ exports.getProductsWithFilters = async (req, res) => {
 
             return {
                 ...product._doc,
+                prodImages: product.images, // Map 'images' to 'prodImages'
+                stock: product.countInStock, // Map 'countInStock' to 'stock'
+                customIdentifier: product.customIdentifer, // Map 'customIdentifer' to 'customIdentifier'
                 inCart: isInCart
             };
         });

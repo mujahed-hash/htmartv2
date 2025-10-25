@@ -37,7 +37,7 @@ router.get('/products/by-category/:customIdentifier',middleware.verifyToken, asy
         const start = parseInt(req.query.start) || 0;
         const limit = parseInt(req.query.limit) || 10;
         const products = await Product.find({ category: category._id,  countInStock: { $gte: 1 } })  .sort({ date: -1 })
-        .select('prodName images customIdentifer prodDesc countInStock prodSize prodPrice')
+        .select('prodName images customIdentifer prodDesc countInStock prodSize prodPrice locations')
         .skip(start)
         .limit(limit).exec();
   // Fetch the user's cart
