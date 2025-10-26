@@ -428,25 +428,22 @@ exports.getProductsWithFilters = async (req, res) => {
         if (req.query.cities !== undefined) {
             console.log('🐞 req.query.cities (before processing): ', req.query.cities, 'Type:', typeof req.query.cities);
 
-            if (Array.isArray(req.query.cities) && req.query.cities.length === 0) {
-                // Frontend sent an empty array, meaning "All India"
-                filter.locations = { $size: 0 }; // MongoDB query for empty array
-                console.log('✅ All India filter applied - showing products with no locations ($size: 0)');
-            } else if (typeof req.query.cities === 'string' && req.query.cities.trim() === '') {
-                // Frontend sent an empty string, meaning "All India"
-                filter.locations = { $size: 0 }; // MongoDB query for empty array
-                console.log('✅ All India filter applied (empty string) - showing products with no locations ($size: 0)');
+            if ((Array.isArray(req.query.cities) && req.query.cities.length === 1 && req.query.cities[0].toLowerCase() === 'all-india') ||
+                (typeof req.query.cities === 'string' && req.query.cities.toLowerCase() === 'all-india')) {
+                // Explicitly filter for "All India" (products with no locations)
+                filter.locations = { $size: 0 };
+                console.log('✅ Explicit "All India" filter applied ($size: 0).');
             } else if (typeof req.query.cities === 'string' && req.query.cities.trim() !== '') {
                 // Specific cities sent as a comma-separated string
                 const cities = req.query.cities.split(',').map(city => city.trim());
                 filter['locations.cityCode'] = { $in: cities };
                 console.log('✅ Specific cities filter applied:', cities);
             } else if (Array.isArray(req.query.cities) && req.query.cities.length > 0) {
-                // Specific cities sent as an array (less common for query params, but good to handle)
+                // Specific cities sent as an array
                 const cities = req.query.cities.map(city => city.trim());
                 filter['locations.cityCode'] = { $in: cities };
                 console.log('✅ Specific cities filter applied (array):', cities);
-            }
+            } // If it's an empty array or empty string, we do not add a locations filter
         }
 
         // State filtering (can be multiple)
@@ -518,6 +515,7 @@ exports.getProductsWithFilters = async (req, res) => {
 
         // Text search (product name, description, tags)
         if (req.query.search && req.query.search.trim() !== '') {
+            console.log('Received search query in backend:', req.query.search);
             filter.$text = { $search: req.query.search };
         }
 

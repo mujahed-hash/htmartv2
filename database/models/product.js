@@ -126,7 +126,6 @@ productSchema.set('toJSON',{
 
 // Enhanced indexes for better query performance
 // Note: Text index already exists as 'product_text_search_index', so we skip creating a new one
-// productSchema.index({ prodName: 'text', prodDesc: 'text', tags: 'text' });
 productSchema.index({ category: 1, 'locations.cityCode': 1 });
 productSchema.index({ prodPrice: 1 });
 productSchema.index({ 'locations.stateCode': 1 });
