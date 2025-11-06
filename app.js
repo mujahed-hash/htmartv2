@@ -36,6 +36,10 @@ const { initSocket, getIo, connectedUsers } = require('./socket'); // Import soc
 const server = http.createServer(app);
 app.use(cors());
 
+// Middleware setup - Moved to the top
+app.use(express.json({ limit: '80mb' }));
+app.use(express.urlencoded({ limit: '80mb', extended: true }));
+
 // Initialize Socket.io with server
 initSocket(server); // Initialize Socket.IO with the server
 
@@ -108,10 +112,6 @@ app.get('/count/unread-count', middleware.verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch unread count' });
   }
 });
-
-// Middleware setup
-app.use(express.json({ limit: '80mb' }));
-app.use(express.urlencoded({ limit: '80mb', extended: true }));
 
 // Static file serving for uploads
 app.use('/uploads/products', express.static(path.join(__dirname, '/uploads/products')));
