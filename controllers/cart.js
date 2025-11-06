@@ -5,6 +5,7 @@ const Product = require('../database/models/product');
 const User = require('../database/models/user');
 const slugify = require('slugify');
 const Notification = require('../database/models/notification');
+const { sendPushNotification } = require('../helper/pushNotifications'); // Import push notification helper
 
 // const { connectedUsers } = require('../connectedusers');
 const { connectedUsers, getIo } = require('../socket'); // Import connectedUsers and getIo
@@ -626,13 +627,27 @@ const checkoutAll = asyncHandler(async (req, res) => {
 
     if (buyerSocketId) {
         io.to(buyerSocketId).emit('notification', buyerNotification);
+        // Send native push notification to buyer
+        await sendPushNotification(
+            userId,
+            'Order Placed!',
+            buyerNotification.message,
+            { orderIdentifier: buyerNotification.orderIdentifier, type: 'order_placed_buyer' }
+        );
         io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
     }
 
-    supplierNotifications.forEach((notification, index) => {
+    supplierNotifications.forEach(async (notification, index) => {
         const supplierSocketId = connectedUsers.get(notification.userId.toString());
         if (supplierSocketId) {
             io.to(supplierSocketId).emit('notification', notification);
+            // Send native push notification to supplier
+            await sendPushNotification(
+                notification.userId,
+                'New Order!',
+                notification.message,
+                { orderIdentifier: notification.orderIdentifier, type: 'new_order_supplier' }
+            );
             io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCounts[index]);
         }
     });
@@ -919,6 +934,13 @@ const checkoutSingle = asyncHandler(async (req, res) => {
 
     if (buyerSocketId) {
         io.to(buyerSocketId).emit('notification', buyerNotification);
+        // Send native push notification to buyer
+        await sendPushNotification(
+            userId,
+            'Order Placed!',
+            buyerNotification.message,
+            { orderIdentifier: buyerNotification.orderIdentifier, type: 'order_placed_buyer' }
+        );
         io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
         console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
 
@@ -926,6 +948,13 @@ const checkoutSingle = asyncHandler(async (req, res) => {
 
     if (supplierSocketId) {
         io.to(supplierSocketId).emit('notification', supplierNotification);
+        // Send native push notification to supplier
+        await sendPushNotification(
+            supplier?._id,
+            'New Order!',
+            supplierNotification.message,
+            { orderIdentifier: supplierNotification.orderIdentifier, type: 'new_order_supplier' }
+        );
         io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
         console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount)
     )

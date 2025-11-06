@@ -3,6 +3,7 @@ const socketIo = require('socket.io');
 const connectedUsers = new Map();
 const Notification = require('../database/models/notification');
 const asyncHandler = require('express-async-handler');
+const { sendPushNotification } = require('../helper/pushNotifications'); // Import push notification helper
 
 // Example function to send a notification
 // Inside your notifications logic, whenever a new notification is created:
@@ -46,9 +47,23 @@ exports.triggerNotification = async (req, res) => {
             // type: newNotification.type,
             message: notification.message,
         });
+        // Also send a native push notification
+        await sendPushNotification(
+            req.userId,
+            'New Notification',
+            notification.message,
+            { type: 'general' }
+        );
 
     // Emit the notification via WebSocket
     sendNotification.sendNotification(userId, notification);
+        // Also send a native push notification for the app.js handler
+        await sendPushNotification(
+            userId,
+            'New Notification',
+            notification.message,
+            { type: 'general' }
+        );
 
             // Also, update the unread count in real-time via Socket
             const unreadCount = await Notification.countDocuments({

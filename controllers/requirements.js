@@ -4,6 +4,7 @@ const ProductSubmission = require('../database/models/productsubmission');
 const Notification = require('../database/models/notification');
 const slugify = require('slugify');
 const { connectedUsers, getIo } = require('../socket'); // Import connectedUsers and getIo
+const { sendPushNotification } = require('../helper/pushNotifications'); // Import push notification helper
 
 // Post a new requirement by the buyer
 const postRequirement = async (req, res) => {
@@ -50,6 +51,13 @@ const postRequirement = async (req, res) => {
     
         if (buyerSocketId) {
             io.to(buyerSocketId).emit('notification', buyerNotification);
+            // Send native push notification to buyer
+            await sendPushNotification(
+                buyer._id,
+                'New Requirement Posted!',
+                buyerNotification.message,
+                { requirementIdentifier: buyerNotification.requirementIdentifier, type: 'new_requirement_buyer' }
+            );
             io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
             console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
     
@@ -165,6 +173,13 @@ const forwardRequirementToSuppliers = async (req, res) => {
                 io.to(supplierSocketId).emit('notification', {
                     message: `A new requirement has been forwarded to you.`,
                 });
+                // Send native push notification to supplier
+                await sendPushNotification(
+                    supplier._id,
+                    'New Requirement Forwarded!',
+                    `A new requirement has been forwarded to you.`,
+                    { requirementIdentifier: requirement.customIdentifier, type: 'requirement_forwarded_supplier' }
+                );
                 io.to(supplierSocketId).emit('unreadCountUpdate', unreadCount);
             }
         }
@@ -268,6 +283,13 @@ const postProductInfo = async (req, res) => {
             requirementIdentifier:requirement?.customIdentifier,
 
         });
+         // Send native push notification to supplier
+         await sendPushNotification(
+             supplier._id,
+             'Product Info Posted!',
+             supplierNotification.message,
+             { requirementIdentifier: supplierNotification.requirementIdentifier, type: 'product_info_posted_supplier' }
+         );
  
         const [supplierUnreadCount] = await Promise.all([
             Notification.countDocuments({ userId:supplier._id, isRead: false }),
@@ -332,9 +354,16 @@ const selectProductForDelivery = async (req, res) => {
     
         if (buyerSocketId) {
             io.to(buyerSocketId).emit('notification', buyerNotification);
+            // Send native push notification to buyer
+            await sendPushNotification(
+                requirement.buyer,
+                'Product Selected!',
+                buyerNotification.message,
+                { requirementIdentifier: buyerNotification.requirementIdentifier, type: 'product_selected_buyer' }
+            );
             io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
             console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
-    
+
         }
 
         res.status(200).json({ message: 'Product selected for delivery successfully.' });
@@ -396,9 +425,16 @@ const forwardProductInfoToBuyer = async (req, res) => {
     
         if (buyerSocketId) {
             io.to(buyerSocketId).emit('notification', buyerNotification);
+            // Send native push notification to buyer
+            await sendPushNotification(
+                productSubmission.requirement.buyer,
+                'Product Info Forwarded!',
+                buyerNotification.message,
+                { requirementIdentifier: buyerNotification.requirementIdentifier, type: 'product_info_forwarded_buyer' }
+            );
             io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
             console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
-    
+
         }
         res.status(200).json({ message: 'Product information forwarded to the buyer successfully.' });
     } catch (error) {
@@ -439,6 +475,13 @@ const confirmDelivery = async (req, res) => {
             requirementIdentifier:requirement?.customIdentifier,
 
         });
+        // Send native push notification to supplier
+        await sendPushNotification(
+            productSubmission.supplier._id,
+            'Delivery Confirmed!',
+            `Delivery for product ${productSubmission.name} has been confirmed by the admin.`,
+            { requirementIdentifier: requirement?.customIdentifier, type: 'delivery_confirmed_supplier' }
+        );
 
         // Notify the buyer about the confirmed delivery
         await Notification.create({
@@ -447,6 +490,13 @@ const confirmDelivery = async (req, res) => {
             requirementIdentifier:requirement?.customIdentifier,
 
         });
+        // Send native push notification to buyer
+        await sendPushNotification(
+            requirement.buyer._id,
+            'Delivery Confirmed!',
+            `Your delivery for product ${productSubmission.name} has been confirmed.`,
+            { requirementIdentifier: requirement?.customIdentifier, type: 'delivery_confirmed_buyer' }
+        );
 
         res.status(200).json({ message: 'Delivery confirmed successfully.' });
     } catch (error) {
@@ -482,14 +532,28 @@ const markRequirementAsCompleted = async (req, res) => {
             requirementIdentifier:requirement?.customIdentifier,
 
         });
+        // Send native push notification to buyer
+        await sendPushNotification(
+            requirement.buyer,
+            'Requirement Completed!',
+            `Your requirement ${requirementId} has been marked as completed.`,
+            { requirementIdentifier: requirement?.customIdentifier, type: 'requirement_completed_buyer' }
+        );
 
-        requirement.suppliers.forEach(supplierId => {
+        requirement.suppliers.forEach(async supplierId => {
             Notification.create({
                 userId: supplierId,
                 message: `Requirement ${requirementId} has been marked as completed.`,
                 requirementIdentifier:requirement?.customIdentifier,
 
             });
+            // Send native push notification to supplier
+            await sendPushNotification(
+                supplierId,
+                'Requirement Completed!',
+                `Requirement ${requirementId} has been marked as completed.`,
+                { requirementIdentifier: requirement?.customIdentifier, type: 'requirement_completed_supplier' }
+            );
         });
 
         res.status(200).json({ message: 'Requirement marked as completed successfully.' });
@@ -549,6 +613,13 @@ const supplierSocketId = connectedUsers.get(productSubmission.supplier.toString(
 
 if (supplierSocketId) {
     io.to(supplierSocketId).emit('notification', supplierNotification);
+    // Send native push notification to supplier
+    await sendPushNotification(
+        productSubmission.supplier,
+        'Delivery Requested!',
+        supplierNotification.message,
+        { requirementIdentifier: supplierNotification.requirementIdentifier, type: 'delivery_requested_supplier' }
+    );
     io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
     console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount))
 
@@ -576,6 +647,13 @@ const io = getIo(); // Get io instance from socket.js
 
 if (buyerSocketId) {
     io.to(buyerSocketId).emit('notification', buyerNotification);
+    // Send native push notification to buyer
+    await sendPushNotification(
+        productSubmission.requirement.buyer,
+        'Requirement Updated!',
+        buyerNotification.message,
+        { requirementIdentifier: buyerNotification.requirementIdentifier, type: 'requirement_updated_buyer' }
+    );
     io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
     console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
 
@@ -716,6 +794,13 @@ const updateStatusToDelivered = async (req, res) => {
     requirementIdentifier:requirement?.customIdentifier,
 
 });
+// Send native push notification to buyer
+await sendPushNotification(
+    requirement.buyer._id,
+    'Delivery Status Updated!',
+    `Your delivery for product ${productSubmission.name} has been delivered.`,
+    { requirementIdentifier: requirement?.customIdentifier, type: 'delivery_status_delivered_buyer' }
+);
         // Update the statuses to 'Delivered'
         requirement.status = 'Delivered';
         await requirement.save();
