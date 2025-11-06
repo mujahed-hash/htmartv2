@@ -72,6 +72,12 @@ const initSocket = (server) => {
 )};
 const sendUnreadCountUpdate = async (userId) => {
     try{
+        // Add a check to ensure userId is a valid ObjectId string
+        if (!userId || typeof userId !== 'string' || userId.length !== 24) {
+            console.warn(`Invalid userId provided to sendUnreadCountUpdate: ${userId}. Skipping update.`);
+            return; // Exit early if userId is invalid
+        }
+
         const unreadCount = await Notification.countDocuments({ userId, isRead: false });
         const socketId = connectedUsers.get(userId.toString());
         if (socketId) {
