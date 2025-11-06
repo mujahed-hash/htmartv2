@@ -39,7 +39,7 @@ const postRequirement = async (req, res) => {
         if (adminUser) {
             // Notify the admin about the new requirement
             const adminNotification = await Notification.create({
-                userId: adminUser._id,
+                userId: adminUser._id || adminUser.id,
                 message: `A new requirement (${customIdentifier}) has been posted by buyer ${buyer.name} and needs your review.`,
                 requirementIdentifier: customIdentifier,
                 referenceId: savedRequirement._id
@@ -47,7 +47,7 @@ const postRequirement = async (req, res) => {
 
             // Send native push notification to admin
             await sendPushNotification(
-                adminUser._id,
+                adminUser._id || adminUser.id,
                 'New Requirement Posted!',
                 adminNotification.message,
                 { requirementIdentifier: adminNotification.requirementIdentifier, type: 'new_requirement_admin' }
