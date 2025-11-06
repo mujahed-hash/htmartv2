@@ -33,42 +33,34 @@ const postRequirement = async (req, res) => {
         // Save the new requirement to the database
         const savedRequirement = await newRequirement.save();
 
-        // Notify the admin about the new requirement
-      const buyerNotification =  await Notification.create({
-            userId: buyer._id,  // This can be an Admin's userId instead
-            message: `A new requirement has been posted by buyer ${buyer.name}.`,
-            requirementIdentifier:customIdentifier,
-            referenceId: savedRequirement._id  // Reference to the requirement
-        });
-        const [buyerUnreadCount] = await Promise.all([
-            Notification.countDocuments({ userId:buyer._id, isRead: false }),
-        ]);
-    
-        const buyerSocketId = connectedUsers.get(buyer._id.toString());
-        // const supplierSocketId = connectedUsers.get(supplier?._id.toString());
-    
-        const io = getIo(); // Get io instance from socket.js
-    
-        if (buyerSocketId) {
-            io.to(buyerSocketId).emit('notification', buyerNotification);
-            // Send native push notification to buyer
+        // Find an admin to notify
+        const adminUser = await User.findOne({ isAdmin: true });
+
+        if (adminUser) {
+            // Notify the admin about the new requirement
+            const adminNotification = await Notification.create({
+                userId: adminUser._id,
+                message: `A new requirement (${customIdentifier}) has been posted by buyer ${buyer.name} and needs your review.`,
+                requirementIdentifier: customIdentifier,
+                referenceId: savedRequirement._id
+            });
+
+            // Send native push notification to admin
             await sendPushNotification(
-                buyer._id,
+                adminUser._id,
                 'New Requirement Posted!',
-                buyerNotification.message,
-                { requirementIdentifier: buyerNotification.requirementIdentifier, type: 'new_requirement_buyer' }
+                adminNotification.message,
+                { requirementIdentifier: adminNotification.requirementIdentifier, type: 'new_requirement_admin' }
             );
-            io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
-            console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
-    
+
+            const adminSocketId = connectedUsers.get(adminUser._id.toString());
+            if (adminSocketId) {
+                io.to(adminSocketId).emit('notification', adminNotification);
+                io.to(adminSocketId).emit('unreadCountUpdate', await Notification.countDocuments({ userId: adminUser._id, isRead: false }));
+            }
+        } else {
+            console.warn('No admin user found to notify about new requirement.');
         }
-    
-        // if (supplierSocketId) {
-        //     io.to(supplierSocketId).emit('notification', supplierNotification);
-        //     io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
-        //     console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount)
-        // )
-        // }
 
         // Respond with a success message and the saved requirement
         res.status(201).json({ message: 'Requirement posted successfully.', requirement: savedRequirement });
@@ -121,8 +113,8 @@ const postRequirement = async (req, res) => {
 //         if (supplierSocketId) {
 //             io.to(supplierSocketId).emit('notification', supplierNotification);
 //             io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
-//             console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount))
-    
+//             console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount)
+//         )
 //         }
     
 //         res.status(200).json({ message: 'Requirement forwarded to suppliers successfully.' });
@@ -182,6 +174,25 @@ const forwardRequirementToSuppliers = async (req, res) => {
                 );
                 io.to(supplierSocketId).emit('unreadCountUpdate', unreadCount);
             }
+        }
+
+        // Notify the buyer about the requirement status update
+        const buyerNotification = await Notification.create({
+            userId: requirement.buyer,
+            message: `Your requirement (${requirement.customIdentifier}) has been forwarded to suppliers.`,
+            requirementIdentifier: requirement.customIdentifier,
+            referenceId: requirement._id
+        });
+        await sendPushNotification(
+            requirement.buyer,
+            'Requirement Forwarded!',
+            buyerNotification.message,
+            { requirementIdentifier: buyerNotification.requirementIdentifier, type: 'requirement_forwarded_buyer' }
+        );
+        const buyerSocketId = connectedUsers.get(requirement.buyer.toString());
+        if (buyerSocketId) {
+            io.to(buyerSocketId).emit('notification', buyerNotification);
+            io.to(buyerSocketId).emit('unreadCountUpdate', await Notification.countDocuments({ userId: requirement.buyer, isRead: false }));
         }
 
         res.status(200).json({ message: 'Requirement forwarded to suppliers successfully.' });
