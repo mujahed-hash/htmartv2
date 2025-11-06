@@ -64,3 +64,5 @@ router.put('/promote-admin/:userId', middleware.verifyToken, superadminControlle
 router.put('/demote-admin/:userId', middleware.verifyToken, superadminController.demoteAdmin);
 
 module.exports = router;
+
+router.post('/cleanup-test-data', middleware.verifyToken, superadminController.cleanupTestData);
