@@ -20,7 +20,15 @@ const User = require('./database/models/user');
 const argon2 = require('argon2');
 const slugify = require('slugify');
 const path = require('path');
+const admin = require('firebase-admin'); // Added
+const serviceAccount = require('./hotelmart-firebase-admin.json'); // Added
 
+// Initialize Firebase Admin SDK
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+const FcmToken = require('./database/models/fcmToken');
+const { sendPushNotification } = require('./helper/pushNotifications');
 // Import socket handling functions
 const { initSocket, getIo, connectedUsers } = require('./socket'); // Import socket management
 
@@ -69,6 +77,14 @@ app.post('/notifications', middleware.verifyToken, async (req, res) => {
 
     // Emit notification to the user
     sendNotification(req.userId, { type: newNotification.type, message: newNotification.message });
+
+    // Send native push notification as well
+    sendPushNotification(
+      req.userId,
+      req.body.title || 'New Notification',
+      req.body.message,
+      { notificationId: newNotification._id.toString(), type: newNotification.type }
+    );
 
     // Emit updated unread count
     sendUnreadCountUpdate(req.userId);
@@ -204,4 +220,33 @@ server.listen(port, async function () {
   
   // Ensure super admin exists when server starts
   await ensureSuperAdmin();
+
+  // Send broadcast notification on server startup
+  await sendBroadcastNotificationOnStartup();
 });
+
+async function sendBroadcastNotificationOnStartup() {
+  try {
+    console.log('Attempting to send broadcast notification on server startup...');
+    const allFcmTokens = await FcmToken.find({});
+    if (allFcmTokens.length > 0) {
+      const messageTitle = 'Server Update!';
+      const messageBody = 'The Hotelmart server has just restarted. We are back online!';
+
+      for (const fcmTokenDoc of allFcmTokens) {
+        await sendPushNotification(
+          fcmTokenDoc.userId.toString(),
+          messageTitle,
+          messageBody,
+          { type: 'server_broadcast' }
+        );
+        console.log(`Broadcast notification sent to user ${fcmTokenDoc.userId}`);
+      }
+      console.log(`Broadcast notification sent to ${allFcmTokens.length} users.`);
+    } else {
+      console.log('No FCM tokens found in the database to send broadcast notification.');
+    }
+  } catch (error) {
+    console.error('Error sending broadcast notification on startup:', error);
+  }
+}
