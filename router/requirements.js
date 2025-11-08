@@ -28,17 +28,23 @@ router.post('/complete-requirement', middleware.verifyToken, roleMiddleware('isB
 // Get requirements for buyer
 router.get('/requirements', middleware.verifyToken, roleMiddleware('isBuyer'), async (req, res) => {
     try {
+        console.log('[BACKEND] Entering /api/request/requirements handler');
         const start = parseInt(req.query.start) || 0;
         const limit = parseInt(req.query.limit) || 20;
+        console.log(`[BACKEND] Fetching requirements for buyer: ${req.userId}, start: ${start}, limit: ${limit}`);
         const requirements = await Requirement.find({ buyer: req.userId }).sort({date:-1}).populate('suppliers').skip(start).limit(limit);
+        console.log(`[BACKEND] Found ${requirements.length} requirements.`);
 
         const totalRequirements = await Requirement.countDocuments({ buyer: req.userId });
+        console.log(`[BACKEND] Total requirements count: ${totalRequirements}`);
 
         res.status(200).json({
             totalRequirements,
             requirements
         });
+        console.log('[BACKEND] Successfully sent requirements response.');
     } catch (error) {
+        console.error('[BACKEND] Error in /api/request/requirements handler:', error); // More specific error log
         res.status(500).json({ message: 'Error fetching requirements.', error });
     }
 });

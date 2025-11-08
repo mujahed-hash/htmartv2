@@ -7,8 +7,7 @@ const asyncHandler = require('express-async-handler');
 const Notification = require('../database/models/notification');
 const notificationsController = require('../controllers/notifications');
 
-router.use(middleware.verifyToken);
-router.get('/notifications',async(req,res)=>{
+router.get('/notifications', middleware.verifyToken, async(req,res)=>{
     try {
         console.log('Backend: Fetching notifications for userId:', req.userId);
         console.log('Backend: Pagination params - start:', req.query.start, 'limit:', req.query.limit);
@@ -44,7 +43,7 @@ router.get('/notifications',async(req,res)=>{
 })
 
 // Get unread count for the authenticated user
-router.get('/count/unread-count', async (req, res) => {
+router.get('/count/unread-count', middleware.verifyToken, async (req, res) => {
     try {
         const unreadCount = await Notification.countDocuments({ userId: req.userId, isRead: false });
         res.status(200).json(unreadCount );
@@ -54,7 +53,7 @@ router.get('/count/unread-count', async (req, res) => {
 });
 
 // Mark all notifications as read
-router.put('/mark-all-read', async (req, res) => {
+router.put('/mark-all-read', middleware.verifyToken, async (req, res) => {
     try {
         const result = await Notification.updateMany({ userId: req.userId, isRead: false }, { isRead: true });
         res.status(200).json({ message: 'All notifications marked as read', modifiedCount: result.nModified });
@@ -63,7 +62,7 @@ router.put('/mark-all-read', async (req, res) => {
     }
 });
 
-router.get('/admin/noitifications',middleware.verifyToken, roleMiddleware('isAdmin'), async(req,res)=>{
+router.get('/admin/noitifications', middleware.verifyToken, roleMiddleware('isAdmin'), async(req,res)=>{
     try {
         const start = parseInt(req.query.start) || 0;
         const limit = parseInt(req.query.limit) || 20;
@@ -86,7 +85,7 @@ router.get('/admin/noitifications',middleware.verifyToken, roleMiddleware('isAdm
 router.post('/notifications', asyncHandler(notificationsController.triggerNotification));
 
 // Mark all notifications as read for admin
-router.put('/admin/mark-all-read',middleware.verifyToken ,roleMiddleware('isAdmin'), notificationsController.markAllAsAdminRead);
+router.put('/admin/mark-all-read', middleware.verifyToken, roleMiddleware('isAdmin'), notificationsController.markAllAsAdminRead);
 
 // Get unread notification count for admin
 router.get('/admin/count/unread-count', middleware.verifyToken, roleMiddleware('isAdmin'), notificationsController.getAdminUnreadNotificationCount);

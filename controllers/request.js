@@ -4,6 +4,9 @@ const Request = require('../database/models/request');
 const User = require('../database/models/user');
 const Notification = require('../database/models/notification');
 const ProductSubmission = require('../database/models/productsubmission'); // Import ProductSubmission model
+const { getIo, connectedUsers } = require('../socket'); // Import socket functions
+const { sendPushNotification } = require('../helper/pushNotifications'); // Import push notification helper
+const { sendUnreadCountUpdate } = require('../socket'); // Import sendUnreadCountUpdate
 
 
 // Function to get all requests along with user details
@@ -42,11 +45,36 @@ exports.createRequest = async (req, res) => {
         });
 
         await request.save();
-          await Notification.create({
-            userId: userId,
-            message: `A request has been posted.`,
-        
-        });
+
+        // Find an admin to notify
+        const adminUser = await User.findOne({ isAdmin: true });
+
+        if (adminUser) {
+            // Create a new Notification for the admin
+            const adminNotification = await Notification.create({
+                userId: adminUser._id,
+                message: `New request received from ${user.name} (${user.email}).`,
+                referenceId: request._id,
+                type: 'new_user_request',
+            });
+
+            // Send native push notification to admin
+            await sendPushNotification(
+                adminUser._id,
+                'New User Request!',
+                adminNotification.message,
+                { requestId: request._id.toString(), type: 'new_user_request' }
+            );
+
+            // Send Socket.IO notification and update unread count for admin
+            const adminSocketId = connectedUsers.get(adminUser._id.toString());
+            if (adminSocketId) {
+                getIo().to(adminSocketId).emit('notification', adminNotification);
+                sendUnreadCountUpdate(adminUser._id.toString());
+            }
+        } else {
+            console.warn('No admin user found to notify about new user request.');
+        }
          
         res.status(201).json({ message: 'Request created successfully', request });
     } catch (error) {

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
 
 const userSchema = mongoose.Schema({
     name:{
@@ -75,8 +76,11 @@ userSchema.set('toJSON',{
 userSchema.methods.getJwt = function() {
     return jwt.sign({
         _id: this._id,
-        email: this.email
-    }, process.env.secret,
+        email: this.email,
+        isAdmin: this.isAdmin,
+        isSupplier: this.isSupplier,
+        isBuyer: this.isBuyer
+    }, process.env.SECRET,
 );
 }
 userSchema.index({ name: 'text', email: 1, customIdentifer: 1, isAdmin: 1 });

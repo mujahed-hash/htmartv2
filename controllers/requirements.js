@@ -37,7 +37,7 @@ const postRequirement = async (req, res) => {
         const adminUser = await User.findOne({ isAdmin: true });
 
         if (adminUser) {
-            // Notify the admin about the new requirement
+        // Notify the admin about the new requirement
             const adminNotification = await Notification.create({
                 userId: adminUser._id || adminUser.id,
                 message: `A new requirement (${customIdentifier}) has been posted by buyer ${buyer.name} and needs your review.`,
@@ -124,25 +124,31 @@ const postRequirement = async (req, res) => {
 // };
 const forwardRequirementToSuppliers = async (req, res) => {
     try {
+        console.log('[BACKEND] Entering forwardRequirementToSuppliers function.');
         const { requirementId } = req.body;
 
         // Find the requirement by ID
         const requirement = await Requirement.findById(requirementId);
         if (!requirement) {
+            console.warn(`[BACKEND] Requirement with ID ${requirementId} not found.`);
             return res.status(404).json({ message: 'Requirement not found.' });
         }
+        console.log(`[BACKEND] Requirement found: ${requirement._id}, Buyer: ${requirement.buyer}`);
 
         // Find all suppliers
         const suppliers = await User.find({ isSupplier: true });
         if (!suppliers.length) {
+            console.warn('[BACKEND] No suppliers found to forward requirement to.');
             return res.status(404).json({ message: 'No suppliers found.' });
         }
+        console.log(`[BACKEND] Found ${suppliers.length} suppliers.`);
 
         // Update the requirement with forwarded suppliers and status
         const supplierIds = suppliers.map(supplier => supplier._id);
         requirement.forwardedTo = supplierIds;
         requirement.status = 'Forwarded';
         await requirement.save();
+        console.log('[BACKEND] Requirement updated and saved as Forwarded.');
 
         // Notify suppliers
         const notifications = suppliers.map(supplier => ({
@@ -152,11 +158,13 @@ const forwardRequirementToSuppliers = async (req, res) => {
             requirementIdentifier: requirement.customIdentifier,
         }));
         await Notification.insertMany(notifications);
+        console.log(`[BACKEND] Notifications created for ${notifications.length} suppliers.`);
 
         // Broadcast notifications via sockets
         const io = getIo(); // Get io instance from socket.js
         for (const supplier of suppliers) {
             const supplierSocketId = connectedUsers.get(supplier._id.toString());
+            console.log(`[BACKEND] Processing supplier ${supplier._id}. Socket ID: ${supplierSocketId}`);
             if (supplierSocketId) {
                 const unreadCount = await Notification.countDocuments({
                     userId: supplier._id,
@@ -173,10 +181,14 @@ const forwardRequirementToSuppliers = async (req, res) => {
                     { requirementIdentifier: requirement.customIdentifier, type: 'requirement_forwarded_supplier' }
                 );
                 io.to(supplierSocketId).emit('unreadCountUpdate', unreadCount);
+                console.log(`[BACKEND] Socket notification and unread count update sent to supplier ${supplier._id}. Unread count: ${unreadCount}`);
+            } else {
+                console.log(`[BACKEND] Supplier ${supplier._id} is not connected via Socket.IO. Skipping socket notification.`);
             }
         }
 
         // Notify the buyer about the requirement status update
+        console.log(`[BACKEND] Notifying buyer ${requirement.buyer} about forwarded requirement.`);
         const buyerNotification = await Notification.create({
             userId: requirement.buyer,
             message: `Your requirement (${requirement.customIdentifier}) has been forwarded to suppliers.`,
@@ -189,15 +201,23 @@ const forwardRequirementToSuppliers = async (req, res) => {
             buyerNotification.message,
             { requirementIdentifier: buyerNotification.requirementIdentifier, type: 'requirement_forwarded_buyer' }
         );
+        // The actual sending of the push notification is handled internally by sendPushNotification, 
+        // which logs whether tokens are found or not. No need for redundant log here.
+        // console.log(`[BACKEND] Push notification sent to buyer ${requirement.buyer}.`);
         const buyerSocketId = connectedUsers.get(requirement.buyer.toString());
+        console.log(`[BACKEND] Buyer ${requirement.buyer} socket ID: ${buyerSocketId}`);
         if (buyerSocketId) {
+            const buyerUnreadCount = await Notification.countDocuments({ userId: requirement.buyer, isRead: false });
             io.to(buyerSocketId).emit('notification', buyerNotification);
-            io.to(buyerSocketId).emit('unreadCountUpdate', await Notification.countDocuments({ userId: requirement.buyer, isRead: false }));
+            io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
+            console.log(`[BACKEND] Socket notification and unread count update sent to buyer ${requirement.buyer}. Unread count: ${buyerUnreadCount}`);
+        } else {
+            console.log(`[BACKEND] Buyer ${requirement.buyer} is not connected via Socket.IO. Skipping socket notification.`);
         }
 
         res.status(200).json({ message: 'Requirement forwarded to suppliers successfully.' });
     } catch (error) {
-        console.error('Error forwarding requirement:', error);
+        console.error('[BACKEND] Error forwarding requirement:', error);
         res.status(500).json({ message: 'Error forwarding requirement.', error });
     }
 };
@@ -287,39 +307,70 @@ const postProductInfo = async (req, res) => {
 
         await newProductSubmission.save();
 
-        // Notify the admin
-        const supplierNotification =   await Notification.create({
+        // Notify the supplier about their product submission
+        const supplierNotification = await Notification.create({
             userId: supplier._id,
-            message: `Product information posted by supplier ${supplier.name} for requirement ${requirement.customIdentifier}.`,
-            requirementIdentifier:requirement?.customIdentifier,
-
+            message: `Your product information for requirement ${requirement.customIdentifier} has been posted.`,
+            requirementIdentifier: requirement?.customIdentifier,
+            referenceId: newProductSubmission._id,
+            type: 'product_info_posted_supplier',
         });
-         // Send native push notification to supplier
-         await sendPushNotification(
-             supplier._id,
-             'Product Info Posted!',
-             supplierNotification.message,
-             { requirementIdentifier: supplierNotification.requirementIdentifier, type: 'product_info_posted_supplier' }
-         );
- 
-        const [supplierUnreadCount] = await Promise.all([
-            Notification.countDocuments({ userId:supplier._id, isRead: false }),
-        ]);
-    
+
+        // Send native push notification to supplier
+        await sendPushNotification(
+            supplier._id,
+            'Product Info Posted!',
+            supplierNotification.message,
+            { requirementIdentifier: supplierNotification.requirementIdentifier, type: 'product_info_posted_supplier' }
+        );
+
         const supplierSocketId = connectedUsers.get(supplier._id.toString());
-        // const supplierSocketId = connectedUsers.get(supplier?._id.toString());
-    
-        const io = getIo(); // Get io instance from socket.js
-    
         if (supplierSocketId) {
             io.to(supplierSocketId).emit('notification', supplierNotification);
-            io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount);
-            console.log(io.to(supplierSocketId).emit('unreadCountUpdate', supplierUnreadCount))
-    
+            io.to(supplierSocketId).emit('unreadCountUpdate', await Notification.countDocuments({ userId: supplier._id, isRead: false }));
+            console.log(`[BACKEND] Socket notification and unread count update sent to supplier ${supplier._id}.`);
+        } else {
+            console.log(`[BACKEND] Supplier ${supplier._id} is not connected via Socket.IO. Skipping socket notification.`);
         }
-    
+
+        const io = getIo(); // Get io instance from socket.js
+
+        // Notify the admin about the new product submission
+        const adminUser = await User.findOne({ isAdmin: true });
+        if (adminUser) {
+            console.log(`[BACKEND] Notifying admin ${adminUser._id} about new product submission.`);
+            const adminNotification = await Notification.create({
+                userId: adminUser._id,
+                message: `Supplier ${supplier.name} has posted product information for requirement ${requirement.customIdentifier}.`,
+                requirementIdentifier: requirement?.customIdentifier,
+                referenceId: newProductSubmission._id,
+                type: 'new_product_submission_admin',
+            });
+
+            // Send native push notification to admin
+            await sendPushNotification(
+                adminUser._id,
+                'New Product Submission!',
+                adminNotification.message,
+                { requirementIdentifier: adminNotification.requirementIdentifier, type: 'new_product_submission_admin' }
+            );
+
+            const adminSocketId = connectedUsers.get(adminUser._id.toString());
+            if (adminSocketId) {
+                io.to(adminSocketId).emit('notification', adminNotification);
+                io.to(adminSocketId).emit('unreadCountUpdate', await Notification.countDocuments({ userId: adminUser._id, isRead: false }));
+                console.log(`[BACKEND] Socket notification and unread count update sent to admin ${adminUser._id}.`);
+            } else {
+                console.log(`[BACKEND] Admin ${adminUser._id} is not connected via Socket.IO. Skipping socket notification.`);
+            }
+        } else {
+            console.warn('[BACKEND] No admin user found to notify about new product submission.');
+        }
+
+        console.log('[BACKEND] Attempting to send success response for postProductInfo.');
         res.status(200).json({ message: 'Product information posted successfully.' });
     } catch (error) {
+        console.error('[BACKEND] Error in postProductInfo:', error);
         res.status(500).json({ message: 'Error posting product information.', error });
     }
 };
@@ -374,7 +425,7 @@ const selectProductForDelivery = async (req, res) => {
             );
             io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
             console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
-
+    
         }
 
         res.status(200).json({ message: 'Product selected for delivery successfully.' });
@@ -445,7 +496,7 @@ const forwardProductInfoToBuyer = async (req, res) => {
             );
             io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount);
             console.log(io.to(buyerSocketId).emit('unreadCountUpdate', buyerUnreadCount))
-
+    
         }
         res.status(200).json({ message: 'Product information forwarded to the buyer successfully.' });
     } catch (error) {

@@ -40,6 +40,12 @@ app.use(cors());
 app.use(express.json({ limit: '80mb' }));
 app.use(express.urlencoded({ limit: '80mb', extended: true }));
 
+// Log all incoming requests for debugging
+// app.use((req, res, next) => {
+//   console.log(`[APP.JS] Incoming Request: ${req.method} ${req.originalUrl}`);
+//   next();
+// });
+
 // Initialize Socket.io with server
 initSocket(server); // Initialize Socket.IO with the server
 
@@ -130,7 +136,7 @@ app.use('/api', orderRoute);
 app.use('/api/request', reqRoute);
 app.use('/api', SearchProd);
 app.use('/api', adminSearch);
-app.use('/api/request', Makerequest);
+app.use('/api', Makerequest);
 app.use('/api', NotificationRoute);
 app.use('/api/superadmin', superadminRoute);
 app.use('/api', require('./router/service')); // Add the service route
@@ -216,7 +222,10 @@ async function ensureSuperAdmin() {
 // Start the server
 const port = 3000;
 server.listen(port, async function () {
-  console.log(`Express server running on http://localhost:${port}`);
+  console.log("*****************************************");
+  console.log("*** HOTELMART BACKEND SERVER STARTED! ***");
+  console.log(`*** Running on http://localhost:${port} ***`);
+  console.log("*****************************************");
   
   // Ensure super admin exists when server starts
   await ensureSuperAdmin();
