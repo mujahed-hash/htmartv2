@@ -2,57 +2,66 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
 const userSchema = mongoose.Schema({
-    name:{
-        type:String
+    name: {
+        type: String
     },
-    email:{
-        type:String
+    firstname: {
+        type: String
     },
-    passwordHash:{
-        type:String
+    lastname: {
+        type: String
     },
-    phone:{
-        type:String
+    email: {
+        type: String
     },
-  
-    street:{
-        type:String
+    passwordHash: {
+        type: String
     },
-    apartment:{
-        type:String
+    phone: {
+        type: String
     },
-    city:{
-        type:String
+    image: {
+        type: String,
+        default: 'assets/images/default-avatar.png'
     },
-    zip:String,
-    country:{
-        type:String
+    street: {
+        type: String
     },
-    isAdmin:{
-        type:Boolean,
-        default:false
+    apartment: {
+        type: String
     },
-    isSupplier:{
-        type:Boolean,
-        default:false
+    city: {
+        type: String
     },
-    isBuyer:{
-        type:Boolean,
-        default:false
+    zip: String,
+    country: {
+        type: String
     },
-    isSuperAdmin:{
-        type:Boolean,
-        default:false
+    isAdmin: {
+        type: Boolean,
+        default: false
     },
-    isRevoked:{
-        type:Boolean,
-        default:false
+    isSupplier: {
+        type: Boolean,
+        default: false
+    },
+    isBuyer: {
+        type: Boolean,
+        default: false
+    },
+    isSuperAdmin: {
+        type: Boolean,
+        default: false
+    },
+    isRevoked: {
+        type: Boolean,
+        default: false
     },
     // Store plaintext password for admin reference (only for super admin use)
     adminPasswordNote: {
         type: String
     },
-    customIdentifer:String,
+    customIdentifer: String,
     posts: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Product'
@@ -61,19 +70,19 @@ const userSchema = mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Request'
     }],
-    
+
     date: { type: Date, default: Date.now },
 
 });
 
-userSchema.virtual('id').get(function(){
+userSchema.virtual('id').get(function () {
     return this._id.toHexString();
 });
 
-userSchema.set('toJSON',{
+userSchema.set('toJSON', {
     virtuals: true,
 });
-userSchema.methods.getJwt = function() {
+userSchema.methods.getJwt = function () {
     return jwt.sign({
         _id: this._id,
         email: this.email,
@@ -81,13 +90,13 @@ userSchema.methods.getJwt = function() {
         isSupplier: this.isSupplier,
         isBuyer: this.isBuyer
     }, process.env.SECRET,
-);
+    );
 }
 userSchema.index({ name: 'text', email: 1, customIdentifer: 1, isAdmin: 1 });
 
 // Virtual field to expose customIdentifer as customIdentifier for frontend compatibility
-userSchema.virtual('customIdentifier').get(function() {
-  return this.customIdentifer;
+userSchema.virtual('customIdentifier').get(function () {
+    return this.customIdentifer;
 });
 
 // Ensure virtual fields are serialized

@@ -8,7 +8,6 @@ const jwt = require('jsonwebtoken');
 const role = require('../helper/roles')
 router.get('/user', userCntrl.getUsers);
 const FcmToken = require('../database/models/fcmToken'); // Import FcmToken model
-const { sendPushNotification } = require('../helper/pushNotifications'); 
 const middleware = require('../helper/middleware');
 const roleMiddleware = require('../helper/roles')
 router.get('/users/all', middleware.verifyToken, roleMiddleware('isAdmin'), userCntrl.getUsers)
@@ -177,15 +176,7 @@ router.post('/users/save-fcm-token', middleware.verifyToken, async (req, res) =>
         { upsert: true, new: true, setDefaultsOnInsert: true } // Create if not found, return new doc
       );
   
-      console.log(`FCM token saved successfully for user ${userId}: ${updatedFcmToken.fcmToken}`);
-  
-      // Send a welcome push notification after saving/updating the token
-      await sendPushNotification(
-        userId,
-        'Welcome to Hotelmart!',
-        'App is installed and enjoy the New way to Business',
-        { type: 'welcome' }
-      );
+      console.log(`FCM token saved successfully for user ${userId}`);
   
       res.status(200).json({ message: 'FCM token saved successfully', fcmToken: updatedFcmToken });
     } catch (error) {

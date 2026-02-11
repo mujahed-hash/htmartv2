@@ -7,7 +7,7 @@ const asyncHandler = require('express-async-handler');
 const Notification = require('../database/models/notification');
 const notificationsController = require('../controllers/notifications');
 
-router.get('/notifications', middleware.verifyToken, async(req,res)=>{
+router.get('/notifications', middleware.verifyToken, async (req, res) => {
     try {
         console.log('Backend: Fetching notifications for userId:', req.userId);
         console.log('Backend: Pagination params - start:', req.query.start, 'limit:', req.query.limit);
@@ -21,12 +21,12 @@ router.get('/notifications', middleware.verifyToken, async(req,res)=>{
         const allNotificationsCount = await Notification.countDocuments({});
         console.log('Backend: Total notifications in DB:', allNotificationsCount);
 
-        const notifications = await Notification.find({userId: req.userId}).sort({date:-1}).populate({
-            path:'userId',
-            select:'name'
+        const notifications = await Notification.find({ userId: req.userId }).sort({ date: -1 }).populate({
+            path: 'userId',
+            select: 'name'
         }).skip(start).limit(limit);
 
-        const totalNotifications = await Notification.countDocuments({userId: req.userId});
+        const totalNotifications = await Notification.countDocuments({ userId: req.userId });
 
         console.log('Backend: Query results - notifications.length:', notifications.length, 'totalNotifications:', totalNotifications);
 
@@ -46,7 +46,7 @@ router.get('/notifications', middleware.verifyToken, async(req,res)=>{
 router.get('/count/unread-count', middleware.verifyToken, async (req, res) => {
     try {
         const unreadCount = await Notification.countDocuments({ userId: req.userId, isRead: false });
-        res.status(200).json(unreadCount );
+        res.status(200).json(unreadCount);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch unread count' });
     }
@@ -62,16 +62,16 @@ router.put('/mark-all-read', middleware.verifyToken, async (req, res) => {
     }
 });
 
-router.get('/admin/noitifications', middleware.verifyToken, roleMiddleware('isAdmin'), async(req,res)=>{
+router.get('/admin/noitifications', middleware.verifyToken, roleMiddleware('isAdmin'), async (req, res) => {
     try {
         const start = parseInt(req.query.start) || 0;
         const limit = parseInt(req.query.limit) || 20;
-        const notifications = await Notification.find({ userId: req.userId }).sort({date:-1}).populate({
-            path:'userId',
-            select:'name'
+        const notifications = await Notification.find({ userId: req.userId }).sort({ date: -1 }).populate({
+            path: 'userId',
+            select: 'name'
         }).skip(start).limit(limit);
 
-        const totalNotifications = await Notification.countDocuments({userId: req.userId});
+        const totalNotifications = await Notification.countDocuments({ userId: req.userId });
 
         res.status(200).json({
             totalNotifications,
@@ -83,6 +83,9 @@ router.get('/admin/noitifications', middleware.verifyToken, roleMiddleware('isAd
 })
 
 router.post('/notifications', asyncHandler(notificationsController.triggerNotification));
+
+// Register socket ID (Alternative to socket.emit('register'))
+router.post('/register-socket', middleware.verifyToken, notificationsController.registerSocket);
 
 // Mark all notifications as read for admin
 router.put('/admin/mark-all-read', middleware.verifyToken, roleMiddleware('isAdmin'), notificationsController.markAllAsAdminRead);

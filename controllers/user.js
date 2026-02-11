@@ -53,8 +53,8 @@ module.exports.userProfile = async (req, res, next) => {
     }
 }
 
-exports.getUsers = async (req,res)=>{
-    const users = await User.find().sort({date:-1}).select('-passwordHash');
+exports.getUsers = async (req, res) => {
+    const users = await User.find().sort({ date: -1 }).select('-passwordHash');
 
     // Transform users to include full image URLs
     const transformedUsers = users.map(user => {
@@ -68,7 +68,7 @@ exports.getUsers = async (req,res)=>{
         return user;
     });
 
-    if(!transformedUsers) return res.status(404).json('No Users found');
+    if (!transformedUsers) return res.status(404).json('No Users found');
     res.status(200).json(transformedUsers);
 }
 
@@ -76,16 +76,16 @@ exports.getUsers = async (req,res)=>{
 //     try {
 //         // Get the JWT token from the request headers, assuming it's in the 'Authorization' header
 //         const token = req.header('Authorization').replace('Bearer ', '');
-  
+
 //         // Verify and decode the token
 //         const decoded = jwt.verify(token, process.env.secret); // Replace 'your-secret-key' with your actual secret key
-  
+
 //         // The 'decoded' object should now contain the user's ID
 //         const userId = decoded.userId;
-  
+
 //         // Use the user ID to query the user's profile
 //         const user = await User.findById(userId).populate('posts');
-  
+
 //         if (!user) {
 //             return res.status(404).json({
 //                 status: false,
@@ -130,11 +130,11 @@ exports.getUsers = async (req,res)=>{
 //     } else {
 //         res.send('Password is wrong');
 //     }
-   
+
 // }
 // exports.signUp = async (req,res)=>{
 //     const { name, email, password, phone, street, apartment, city, zip, country, isAdmin, isSupplier, isBuyer } = req.body;
-     
+
 //     const foundUser = await User.findOne({email})
 //     if(foundUser){
 //         res.send('user Exists')
@@ -223,7 +223,7 @@ exports.login = async (req, res) => {
     try {
         // Normalize email to lowercase
         const normalizedEmail = email.toLowerCase();
-    console.log(normalizedEmail)
+        console.log(normalizedEmail)
         const user = await User.findOne({ email: normalizedEmail });
         // Verify user exists and password matches
         if (!user || !(await argon2.verify(user.passwordHash, password))) {
@@ -235,7 +235,7 @@ exports.login = async (req, res) => {
             if (user.isRevoked) {
                 return res.status(403).send('Your account has been deactivated. Please contact support.');
             }
-            
+
             const token = jwt.sign(
                 {
                     id: user._id,
@@ -246,8 +246,8 @@ exports.login = async (req, res) => {
                     isBuyer: user.isBuyer,
                     isSuperAdmin: user.isSuperAdmin,
                 },
-                process.env.SECRET, // Replace with your secret key
-                { expiresIn: '321d' }
+                process.env.SECRET, // Secret key from environment
+                { expiresIn: '30d' } // Changed from 321d to 30d for security
             );
 
             res.send({ user: user.email, token });
